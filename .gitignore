@@ -6,3 +6,5 @@ build/
 *.r1cs
 *.sym
 *_js/
+apps/issuer/data/
+apps/issuer/data/
