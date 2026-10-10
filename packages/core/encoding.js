@@ -23,7 +23,23 @@ function enumIndex(list, value) {
 // "1995-03-14" -> 19950314n
 function dateToInt(iso) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) throw new Error(`Bad date: ${iso}`);
+    // Reject dates that don't exist, like 1995-02-30 or 1995-13-01
+    const d = new Date(iso + "T00:00:00Z");
+    if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== iso) {
+        throw new Error(`Bad date: ${iso}`);
+    }
     return BigInt(iso.replace(/-/g, ""));
+}
+
+// The BN254 scalar field prime p: every circuit value must be below it
+const FIELD_PRIME = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+
+// Decimal string -> field element, refusing anything that would wrap around mod p
+function toField(value, label) {
+    if (!/^\d+$/.test(String(value))) throw new Error(`${label} must be a decimal number`);
+    const n = BigInt(value);
+    if (n >= FIELD_PRIME) throw new Error(`${label} is not a valid field element`);
+    return n;
 }
 
 // Text -> one field element: pack 31 bytes per chunk, length first, then hash
@@ -41,8 +57,8 @@ async function encodeName(name) {
 async function encodeAttributes(c) {
     return [
         SCHEMA_VERSION,                           // 0
-        BigInt(c.credentialId),                   // 1
-        BigInt(c.holderCommitment),               // 2
+        toField(c.credentialId, "credentialId"),  // 1
+        toField(c.holderCommitment, "holderCommitment"), // 2
         await encodeName(c.name),                 // 3
         dateToInt(c.dateOfBirth),                 // 4
         enumIndex(STATES, c.state),               // 5

@@ -55,4 +55,21 @@ function buildDidDocument(did, publicKey) {
     };
 }
 
-module.exports = { toBase64Url, fromBase64Url, didFromHost, didToUrl, buildDidDocument };
+// Pull one public key out of a DID document, as the decimal strings the crypto code uses.
+// keyId is the full name, e.g. "did:web:localhost%3A3000#key-1".
+function publicKeyFromDidDocument(doc, keyId) {
+    const method = (doc.verificationMethod || []).find((m) => m.id === keyId);
+    if (!method) throw new Error(`Key not found in DID document: ${keyId}`);
+    if (method.controller !== doc.id) throw new Error("Key is not controlled by this DID");
+    // The key must be listed as allowed to sign credentials
+    if (!(doc.assertionMethod || []).includes(keyId)) {
+        throw new Error("Key is not authorised to sign credentials");
+    }
+    const jwk = method.publicKeyJwk;
+    if (!jwk || jwk.crv !== "BabyJubJub") throw new Error("Not a BabyJubJub key");
+    return { x: fromBase64Url(jwk.x), y: fromBase64Url(jwk.y) };
+}
+
+module.exports = {
+    toBase64Url, fromBase64Url, didFromHost, didToUrl, buildDidDocument, publicKeyFromDidDocument,
+};
