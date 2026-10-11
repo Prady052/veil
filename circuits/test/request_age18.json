@@ -1,4 +1,5 @@
 {
+  "issuer": "did:web:localhost%3A3000",
   "predicates": [
     { "attr": "dateOfBirth", "op": "<=", "value": "2008-10-11" }
   ]

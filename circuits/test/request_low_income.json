@@ -1,4 +1,5 @@
 {
+  "issuer": "did:web:localhost%3A3000",
   "predicates": [
     { "attr": "incomeBand", "op": "<=", "value": "<2.5L" }
   ]

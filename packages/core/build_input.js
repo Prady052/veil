@@ -1,9 +1,8 @@
 // Turn a credential plus a verifier's request into the input file for the presentation circuit.
-// The real wallet (Week 4) will do this in the browser.
+// Useful for running the witness generator by hand.
 // Run: node packages/core/build_input.js <request.json> [credential.json] [output.json]
 const fs = require("fs");
-const { didToUrl, publicKeyFromDidDocument } = require("./did");
-const { encodePredicates } = require("./predicates");
+const { resolveIssuerKey, buildCircuitInput } = require("./presentation");
 
 async function main() {
     const requestFile = process.argv[2];
@@ -18,21 +17,8 @@ async function main() {
     const vc = JSON.parse(fs.readFileSync(vcFile, "utf8"));
 
     // The issuer's public key comes from its DID document, never from the credential itself
-    const response = await fetch(didToUrl(vc.issuer));
-    if (!response.ok) throw new Error(`Could not resolve ${vc.issuer}: HTTP ${response.status}`);
-    const issuerKey = publicKeyFromDidDocument(await response.json(), vc.proof.verificationMethod);
-
-    const input = {
-        // private
-        attrs: vc.proof.attributes,
-        R8x: vc.proof.signature.R8x,
-        R8y: vc.proof.signature.R8y,
-        S: vc.proof.signature.S,
-        // public
-        Ax: issuerKey.x,
-        Ay: issuerKey.y,
-        ...(await encodePredicates(request.predicates)),
-    };
+    const issuerKey = await resolveIssuerKey(vc.issuer, vc.proof.verificationMethod);
+    const input = await buildCircuitInput(vc, issuerKey, request.predicates);
 
     fs.writeFileSync(outFile, JSON.stringify(input, null, 2));
     console.log("Wrote", outFile);
