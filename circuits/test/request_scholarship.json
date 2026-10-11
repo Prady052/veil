@@ -1,0 +1,7 @@
+{
+  "predicates": [
+    { "attr": "dateOfBirth", "op": "<=", "value": "2008-10-11" },
+    { "attr": "incomeBand", "op": "<=", "value": "5L-8L" },
+    { "attr": "state", "op": "==", "value": "MH" }
+  ]
+}

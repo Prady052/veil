@@ -53,20 +53,53 @@ async function encodeName(name) {
     return poseidon.F.toObject(poseidon(chunks));
 }
 
+// The attribute vector's slot order: ATTRIBUTES[4] is "dateOfBirth", and so on
+const ATTRIBUTES = [
+    "schemaVersion",    // 0
+    "credentialId",     // 1
+    "holderCommitment", // 2
+    "name",             // 3
+    "dateOfBirth",      // 4
+    "state",            // 5
+    "incomeBand",       // 6
+    "employmentStatus", // 7
+    "issuedAt",         // 8
+    "expiresAt",        // 9
+];
+
+// Encode ONE attribute value as its field element.
+// Used for the credential itself and for the values in predicates, so they always agree.
+async function encodeValue(attr, value) {
+    switch (attr) {
+        case "schemaVersion":
+        case "credentialId":
+        case "holderCommitment":
+            return toField(value, attr);
+        case "name":
+            return encodeName(value);
+        case "dateOfBirth":
+        case "issuedAt":
+        case "expiresAt":
+            return dateToInt(value);
+        case "state":
+            return enumIndex(STATES, value);
+        case "incomeBand":
+            return enumIndex(INCOME_BANDS, value);
+        case "employmentStatus":
+            return enumIndex(EMPLOYMENT, value);
+        default:
+            throw new Error(`Unknown attribute: ${attr}`);
+    }
+}
+
 // Human-readable claims -> the 10-slot attribute vector
 async function encodeAttributes(c) {
-    return [
-        SCHEMA_VERSION,                           // 0
-        toField(c.credentialId, "credentialId"),  // 1
-        toField(c.holderCommitment, "holderCommitment"), // 2
-        await encodeName(c.name),                 // 3
-        dateToInt(c.dateOfBirth),                 // 4
-        enumIndex(STATES, c.state),               // 5
-        enumIndex(INCOME_BANDS, c.incomeBand),    // 6
-        enumIndex(EMPLOYMENT, c.employmentStatus),// 7
-        dateToInt(c.issuedAt),                    // 8
-        dateToInt(c.expiresAt),                   // 9
-    ];
+    const claims = { ...c, schemaVersion: SCHEMA_VERSION.toString() };
+    const attrs = [];
+    for (const attr of ATTRIBUTES) {
+        attrs.push(await encodeValue(attr, claims[attr]));
+    }
+    return attrs;
 }
 
 // The single number the issuer signs: M = Poseidon(attr[0..9])
@@ -76,6 +109,6 @@ async function hashAttributes(attrs) {
 }
 
 module.exports = {
-    SCHEMA_VERSION, STATES, INCOME_BANDS, EMPLOYMENT,
-    dateToInt, encodeName, encodeAttributes, hashAttributes,
+    SCHEMA_VERSION, STATES, INCOME_BANDS, EMPLOYMENT, ATTRIBUTES,
+    dateToInt, encodeName, encodeValue, encodeAttributes, hashAttributes,
 };

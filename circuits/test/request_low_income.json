@@ -1,0 +1,5 @@
+{
+  "predicates": [
+    { "attr": "incomeBand", "op": "<=", "value": "<2.5L" }
+  ]
+}

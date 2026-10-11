@@ -1,0 +1,5 @@
+{
+  "predicates": [
+    { "attr": "dateOfBirth", "op": "<=", "value": "2008-10-11" }
+  ]
+}
