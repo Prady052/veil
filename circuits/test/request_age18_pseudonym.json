@@ -1,0 +1,7 @@
+{
+  "issuer": "did:web:localhost%3A3000",
+  "pseudonym": true,
+  "predicates": [
+    { "attr": "dateOfBirth", "op": "<=", "value": "2008-10-11" }
+  ]
+}

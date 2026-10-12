@@ -26,8 +26,11 @@ describe("Presentation proofs", function () {
     let vkey;
     let issuerKey;      // the trusted issuer's public key, { x, y }
     let otherIssuerKey; // some other issuer
-    let request;        // the request the proof is made for
+    let request;        // a request with no pseudonym, and the proof made for it
     let proof;
+    let nymRequest;     // a request that asks for a pseudonym, and the proof made for it
+    let nymProof;
+    let nym;            // the pseudonym that proof reveals
 
     before(async function () {
         if (![WASM_FILE, ZKEY_FILE, VKEY_FILE].every((file) => fs.existsSync(file))) {
@@ -72,19 +75,37 @@ describe("Presentation proofs", function () {
             },
         };
 
-        // The age gate asks, the holder answers with one proof
-        request = newRequest({ issuer: "did:web:issuer.example", predicates: [AGE_18] }, "agegate.example");
-        const input = await buildCircuitInput(vc, issuerKey, request, HOLDER_SECRET);
-        try {
-            ({ proof } = await snarkjs.groth16.fullProve(input, WASM_FILE, ZKEY_FILE));
-        } catch (err) {
-            throw new Error("Could not prove with the keys in build/. If the circuit changed, run `npm run setup`.");
+        // The holder's side: answer a request with a proof (and the circuit's output)
+        async function prove(forRequest) {
+            const input = await buildCircuitInput(vc, issuerKey, forRequest, HOLDER_SECRET);
+            try {
+                return await snarkjs.groth16.fullProve(input, WASM_FILE, ZKEY_FILE);
+            } catch (err) {
+                throw new Error("Could not prove with the keys in build/. If the circuit changed, run `npm run setup`.");
+            }
         }
+
+        // The age gate asks, the holder answers
+        const wanted = { issuer: "did:web:issuer.example", predicates: [AGE_18] };
+        request = newRequest(wanted, "agegate.example");
+        ({ proof } = await prove(request));
+
+        // The same again, this time asking for a pseudonym
+        nymRequest = newRequest({ ...wanted, pseudonym: true }, "agegate.example");
+        const result = await prove(nymRequest);
+        nymProof = result.proof;
+        nym = result.publicSignals[0];
     });
 
-    // Check the one proof against a request, as a verifier would
+    // Check the plain proof against a request, as a verifier would
     async function verifies(checkedRequest, key = issuerKey) {
         return snarkjs.groth16.verify(vkey, await buildPublicSignals(key, checkedRequest), proof);
+    }
+
+    // Check a proof against the pseudonym request, with the pseudonym the holder claims
+    async function verifiesWithPseudonym(claimedPseudonym, whichProof = nymProof) {
+        const signals = await buildPublicSignals(issuerKey, nymRequest, claimedPseudonym);
+        return snarkjs.groth16.verify(vkey, signals, whichProof);
     }
 
     it("verifies for the request it was made for", async function () {
@@ -108,5 +129,19 @@ describe("Presentation proofs", function () {
 
     it("rejects a proof checked against another issuer's key", async function () {
         assert.strictEqual(await verifies(request, otherIssuerKey), false);
+    });
+
+    it("verifies with the pseudonym the holder really has", async function () {
+        assert.notStrictEqual(nym, "0");
+        assert.strictEqual(await verifiesWithPseudonym(nym), true);
+    });
+
+    it("rejects a holder claiming a different pseudonym", async function () {
+        const someoneElses = (BigInt(nym) + 1n).toString();
+        assert.strictEqual(await verifiesWithPseudonym(someoneElses), false);
+    });
+
+    it("rejects a proof made without a pseudonym when one was asked for", async function () {
+        assert.strictEqual(await verifiesWithPseudonym(nym, proof), false);
     });
 });

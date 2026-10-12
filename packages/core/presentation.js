@@ -1,7 +1,8 @@
 // Shared pieces of a presentation: used by the holder (to prove) and the verifier (to check).
 //
 // A request, as the verifier sends it:
-//   { issuer, domain, nonce, predicates }
+//   { issuer, domain, nonce, pseudonym, predicates }
+// `pseudonym: true` asks the holder to reveal their pseudonym for this domain.
 const crypto = require("crypto");
 const { didToUrl, publicKeyFromDidDocument } = require("./did");
 const { encodeText } = require("./encoding");
@@ -19,11 +20,12 @@ async function resolveIssuerKey(did, keyId) {
 
 // VERIFIER: turn "what I want proven" into a request for one presentation.
 // The nonce is fresh random for every request, so a proof can only answer this one.
-function newRequest({ issuer, predicates }, domain) {
+function newRequest({ issuer, predicates, pseudonym = false }, domain) {
     return {
         issuer,
         domain,
         nonce: BigInt("0x" + crypto.randomBytes(31).toString("hex")).toString(),
+        pseudonym,
         predicates,
     };
 }
@@ -33,6 +35,7 @@ async function requestInputs(request) {
     return {
         nonce: request.nonce,
         domainHash: (await encodeText(request.domain)).toString(),
+        wantPseudonym: request.pseudonym ? "1" : "0",
         ...(await encodePredicates(request.predicates)),
     };
 }
@@ -53,12 +56,20 @@ async function buildCircuitInput(vc, issuerKey, request, holderSecret) {
     };
 }
 
-// VERIFIER: the public inputs, built from its own request and the issuer's key.
-// The order must match the order the public inputs are declared in
-// circuits/presentation.circom: Ax, Ay, nonce, domainHash, predAttr[], predOp[], predValue[].
-async function buildPublicSignals(issuerKey, request) {
-    const { nonce, domainHash, predAttr, predOp, predValue } = await requestInputs(request);
-    return [issuerKey.x, issuerKey.y, nonce, domainHash, ...predAttr, ...predOp, ...predValue];
+// VERIFIER: the public signals, built from its own request and the issuer's key.
+// The pseudonym is the one value that comes from the holder: the verifier can't compute it,
+// but the proof only verifies if it is the true one. If none was asked for, it must be 0.
+//
+// Order: the circuit's output first, then its public inputs in the order they are declared in
+// circuits/presentation.circom:
+//   pseudonym, Ax, Ay, nonce, domainHash, wantPseudonym, predAttr[], predOp[], predValue[].
+async function buildPublicSignals(issuerKey, request, pseudonym) {
+    const { nonce, domainHash, wantPseudonym, predAttr, predOp, predValue } = await requestInputs(request);
+    return [
+        request.pseudonym ? String(pseudonym) : "0",
+        issuerKey.x, issuerKey.y, nonce, domainHash, wantPseudonym,
+        ...predAttr, ...predOp, ...predValue,
+    ];
 }
 
 module.exports = { resolveIssuerKey, newRequest, buildCircuitInput, buildPublicSignals };

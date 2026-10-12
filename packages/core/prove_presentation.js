@@ -41,20 +41,25 @@ async function main() {
     // Witness + proof in one call. If any rule is broken, no witness exists and this throws.
     const start = Date.now();
     let proof;
+    let publicSignals;
     try {
-        ({ proof } = await snarkjs.groth16.fullProve(input, WASM_FILE, ZKEY_FILE));
+        ({ proof, publicSignals } = await snarkjs.groth16.fullProve(input, WASM_FILE, ZKEY_FILE));
     } catch (err) {
         console.log("Cannot prove: this credential does not satisfy the request.");
         process.exit(1);
     }
     console.log(`Proof generated in ${((Date.now() - start) / 1000).toFixed(1)} s`);
 
-    // What is sent to the verifier. No attributes, no signature, no public inputs:
-    // the verifier rebuilds the public inputs itself.
+    // What is sent to the verifier. No attributes and no signature. The verifier rebuilds
+    // the public inputs itself; the pseudonym is included only if it asked for one.
     const presentation = {
         verificationMethod: vc.proof.verificationMethod, // which issuer key signed the credential
         proof,
     };
+    if (request.pseudonym) {
+        presentation.pseudonym = publicSignals[0]; // the circuit's output
+        console.log(`Revealing your pseudonym for ${request.domain}`);
+    }
     fs.writeFileSync(outFile, JSON.stringify(presentation, null, 2));
     console.log("Wrote", outFile);
     process.exit(0); // snarkjs keeps worker threads alive; exit explicitly

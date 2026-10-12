@@ -3,6 +3,7 @@ pragma circom 2.1.6;
 include "lib/credential.circom";
 include "lib/holder.circom";
 include "lib/predicate.circom";
+include "lib/pseudonym.circom";
 
 // A presentation: "I hold a credential signed by this issuer, it was issued to me,
 // and its attributes satisfy these predicates".
@@ -19,9 +20,13 @@ template Presentation(nAttrs, nPreds) {
     signal input Ay;
     signal input nonce;           // fresh random number, chosen by the verifier for this request
     signal input domainHash;      // hash of the verifier's domain name
+    signal input wantPseudonym;   // 1 if the verifier asked for a pseudonym, else 0
     signal input predAttr[nPreds];    // which slot each predicate is about
     signal input predOp[nPreds];      // 0 none, 1 ==, 2 >=, 3 <=
     signal input predValue[nPreds];   // the value to compare against
+
+    // ---- Public output ----
+    signal output pseudonym;      // Poseidon(holderSecret, domainHash), or 0 if not asked for
 
     // 1. The credential is genuine
     component cred = VerifyCredential(nAttrs);
@@ -51,11 +56,18 @@ template Presentation(nAttrs, nPreds) {
         pred[p].value     <== predValue[p];
     }
 
-    // 4. Bind the proof to one request at one verifier (replay protection).
-    //    No rule above uses nonce or domainHash. A public input that appears in no
-    //    constraint may not be tied to the proof at all, so each is used in one here.
+    // 4. A pseudonym for this verifier only, from the same secret that owns the credential
+    component nym = ScopedPseudonym();
+    nym.holderSecret <== holderSecret;
+    nym.domainHash   <== domainHash;
+    nym.enabled      <== wantPseudonym;
+    pseudonym <== nym.out;
+
+    // 5. Bind the proof to one request at one verifier (replay protection).
+    //    domainHash is used by the pseudonym above. No rule uses the nonce, and a public
+    //    input that appears in no constraint may not be tied to the proof at all,
+    //    so it is used in one here.
     signal nonceSquared <== nonce * nonce;
-    signal domainHashSquared <== domainHash * domainHash;
 }
 
-component main {public [Ax, Ay, nonce, domainHash, predAttr, predOp, predValue]} = Presentation(10, 4);
+component main {public [Ax, Ay, nonce, domainHash, wantPseudonym, predAttr, predOp, predValue]} = Presentation(10, 4);

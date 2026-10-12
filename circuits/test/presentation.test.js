@@ -40,10 +40,13 @@ describe("Presentation circuit", function () {
     let issuerKey;
     let issuerPub;
     let commitmentOf; // secret -> Poseidon(secret), as a decimal string
+    let pseudonymOf;  // (secret, domainHash) -> Poseidon(secret, domainHash)
 
     before(async function () {
         const poseidon = await buildPoseidon();
         commitmentOf = (secret) => poseidon.F.toObject(poseidon([BigInt(secret)])).toString();
+        pseudonymOf = (secret, domainHash) =>
+            poseidon.F.toObject(poseidon([BigInt(secret), BigInt(domainHash)])).toString();
         circuit = await wasmTester(path.join(ROOT, "circuits", "presentation.circom"), {
             include: [path.join(ROOT, "node_modules")],
             output: path.join(ROOT, "build", "test"),
@@ -75,7 +78,8 @@ describe("Presentation circuit", function () {
     // Circuit input: the credential and the prover's secret (private), plus what the
     // VERIFIER supplies (public): the trusted issuer key, the request's nonce and domain,
     // and the predicates. Any nonce and domain give a witness, so fixed values are fine here.
-    async function makeInput(credential, predicates = [], holderSecret = HOLDER_SECRET) {
+    // `overrides` replaces single inputs, e.g. { wantPseudonym: "1" }.
+    async function makeInput(credential, predicates = [], holderSecret = HOLDER_SECRET, overrides = {}) {
         return {
             ...credential,
             holderSecret,
@@ -83,7 +87,9 @@ describe("Presentation circuit", function () {
             Ay: F.toObject(issuerPub[1]).toString(),
             nonce: "424242",
             domainHash: "777",
+            wantPseudonym: "0",
             ...(await encodePredicates(predicates)),
+            ...overrides,
         };
     }
 
@@ -96,6 +102,13 @@ describe("Presentation circuit", function () {
     // No witness exists: some rule is broken
     async function expectFail(input) {
         await assert.rejects(() => circuit.calculateWitness(input, true));
+    }
+
+    // The circuit's public output. In a witness, wire 0 is the constant 1 and outputs come next.
+    async function pseudonymFor(input) {
+        const witness = await circuit.calculateWitness(input, true);
+        await circuit.checkConstraints(witness);
+        return witness[1].toString();
     }
 
     describe("valid presentations", function () {
@@ -198,6 +211,50 @@ describe("Presentation circuit", function () {
             const credential = await issue();
             credential.attrs[2] = commitmentOf(OTHER_SECRET); // breaks the issuer's signature
             await expectFail(await makeInput(credential, [AGE_18], OTHER_SECRET));
+        });
+    });
+
+    describe("scoped pseudonym", function () {
+        const SITE_A = "777"; // two verifiers' domain hashes
+        const SITE_B = "888";
+
+        it("outputs Poseidon(holderSecret, domainHash) when asked", async function () {
+            const input = await makeInput(await issue(), [], HOLDER_SECRET, { wantPseudonym: "1", domainHash: SITE_A });
+            assert.strictEqual(await pseudonymFor(input), pseudonymOf(HOLDER_SECRET, SITE_A));
+        });
+
+        it("outputs 0 when not asked", async function () {
+            const input = await makeInput(await issue(), [], HOLDER_SECRET, { wantPseudonym: "0" });
+            assert.strictEqual(await pseudonymFor(input), "0");
+        });
+
+        it("is the same for one holder at one verifier, even with a different credential", async function () {
+            const first = await issue({ credentialId: "111" });
+            const second = await issue({ credentialId: "222", incomeBand: "12L+" });
+            const ask = { wantPseudonym: "1", domainHash: SITE_A };
+            assert.strictEqual(
+                await pseudonymFor(await makeInput(first, [], HOLDER_SECRET, ask)),
+                await pseudonymFor(await makeInput(second, [], HOLDER_SECRET, ask)),
+            );
+        });
+
+        it("differs for one holder at two verifiers", async function () {
+            const credential = await issue();
+            const atA = await pseudonymFor(await makeInput(credential, [], HOLDER_SECRET, { wantPseudonym: "1", domainHash: SITE_A }));
+            const atB = await pseudonymFor(await makeInput(credential, [], HOLDER_SECRET, { wantPseudonym: "1", domainHash: SITE_B }));
+            assert.notStrictEqual(atA, atB);
+        });
+
+        it("differs for two holders at one verifier", async function () {
+            const ask = { wantPseudonym: "1", domainHash: SITE_A };
+            const mine = await pseudonymFor(await makeInput(await issue(), [], HOLDER_SECRET, ask));
+            const theirCredential = await issue({ holderCommitment: commitmentOf(OTHER_SECRET) });
+            const theirs = await pseudonymFor(await makeInput(theirCredential, [], OTHER_SECRET, ask));
+            assert.notStrictEqual(mine, theirs);
+        });
+
+        it("rejects a wantPseudonym flag that is not 0 or 1", async function () {
+            await expectFail(await makeInput(await issue(), [], HOLDER_SECRET, { wantPseudonym: "2" }));
         });
     });
 
