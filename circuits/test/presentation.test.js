@@ -5,16 +5,20 @@ const path = require("path");
 const assert = require("assert");
 const crypto = require("crypto");
 const { wasm: wasmTester } = require("circom_tester");
-const { buildEddsa } = require("circomlibjs");
+const { buildEddsa, buildPoseidon } = require("circomlibjs");
 const { encodeAttributes, hashAttributes } = require("../../packages/core/encoding");
 const { encodePredicates } = require("../../packages/core/predicates");
 
 const ROOT = path.join(__dirname, "..", "..");
 
+// The wallet secrets of two different people
+const HOLDER_SECRET = "1234567890123456789";
+const OTHER_SECRET = "9876543210987654321";
+
 // A test credential. Individual tests override single fields.
+// holderCommitment is added in issue(): it is Poseidon(HOLDER_SECRET).
 const BASE_CLAIMS = {
     credentialId: "123456789",
-    holderCommitment: "987654321",
     name: "Asha Rao",
     dateOfBirth: "1995-03-14",
     state: "MH",
@@ -34,8 +38,11 @@ describe("Presentation circuit", function () {
     let F;
     let issuerKey;
     let issuerPub;
+    let commitmentOf; // secret -> Poseidon(secret), as a decimal string
 
     before(async function () {
+        const poseidon = await buildPoseidon();
+        commitmentOf = (secret) => poseidon.F.toObject(poseidon([BigInt(secret)])).toString();
         circuit = await wasmTester(path.join(ROOT, "circuits", "presentation.circom"), {
             include: [path.join(ROOT, "node_modules")],
             output: path.join(ROOT, "build", "test"),
@@ -46,10 +53,14 @@ describe("Presentation circuit", function () {
         issuerPub = eddsa.prv2pub(issuerKey);
     });
 
-    // Issue a credential: encode, hash, sign.
+    // Issue a credential: encode, hash, sign. By default it is bound to HOLDER_SECRET.
     // `signingKey` lets a test play a fake issuer.
     async function issue(overrides = {}, signingKey = issuerKey) {
-        const attrs = await encodeAttributes({ ...BASE_CLAIMS, ...overrides });
+        const attrs = await encodeAttributes({
+            ...BASE_CLAIMS,
+            holderCommitment: commitmentOf(HOLDER_SECRET),
+            ...overrides,
+        });
         const M = await hashAttributes(attrs);
         const sig = eddsa.signPoseidon(signingKey, F.e(M));
         return {
@@ -60,11 +71,12 @@ describe("Presentation circuit", function () {
         };
     }
 
-    // Circuit input: the credential (private) plus what the VERIFIER supplies (public):
-    // the trusted issuer key and the predicates.
-    async function makeInput(credential, predicates = []) {
+    // Circuit input: the credential and the prover's secret (private), plus what the
+    // VERIFIER supplies (public): the trusted issuer key and the predicates.
+    async function makeInput(credential, predicates = [], holderSecret = HOLDER_SECRET) {
         return {
             ...credential,
+            holderSecret,
             Ax: F.toObject(issuerPub[0]).toString(),
             Ay: F.toObject(issuerPub[1]).toString(),
             ...(await encodePredicates(predicates)),
@@ -164,6 +176,24 @@ describe("Presentation circuit", function () {
             const credential = await issue({ dateOfBirth: "1990-01-01" }, attackerKey);
             // makeInput still supplies the REAL issuer's public key
             await expectFail(await makeInput(credential, [AGE_18]));
+        });
+    });
+
+    describe("holder binding", function () {
+        it("accepts a credential issued to another holder when that holder proves", async function () {
+            const credential = await issue({ holderCommitment: commitmentOf(OTHER_SECRET) });
+            await expectPass(await makeInput(credential, [AGE_18], OTHER_SECRET));
+        });
+
+        it("rejects a stolen credential used with the thief's own secret", async function () {
+            const credential = await issue(); // bound to HOLDER_SECRET
+            await expectFail(await makeInput(credential, [AGE_18], OTHER_SECRET));
+        });
+
+        it("rejects a stolen credential re-pointed at the thief's commitment", async function () {
+            const credential = await issue();
+            credential.attrs[2] = commitmentOf(OTHER_SECRET); // breaks the issuer's signature
+            await expectFail(await makeInput(credential, [AGE_18], OTHER_SECRET));
         });
     });
 

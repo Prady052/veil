@@ -4,6 +4,8 @@
 const fs = require("fs");
 const { resolveIssuerKey, buildCircuitInput } = require("./presentation");
 
+const SECRET_FILE = "build/holder_secret.txt"; // the wallet's secret, created by request_credential.js
+
 async function main() {
     const requestFile = process.argv[2];
     const vcFile = process.argv[3] || "build/credential.json";
@@ -18,7 +20,8 @@ async function main() {
 
     // The issuer's public key comes from its DID document, never from the credential itself
     const issuerKey = await resolveIssuerKey(vc.issuer, vc.proof.verificationMethod);
-    const input = await buildCircuitInput(vc, issuerKey, request.predicates);
+    const holderSecret = fs.readFileSync(SECRET_FILE, "utf8").trim();
+    const input = await buildCircuitInput(vc, issuerKey, request.predicates, holderSecret);
 
     fs.writeFileSync(outFile, JSON.stringify(input, null, 2));
     console.log("Wrote", outFile);

@@ -13,13 +13,14 @@ async function resolveIssuerKey(did, keyId) {
 }
 
 // HOLDER: everything the circuit needs, private and public
-async function buildCircuitInput(vc, issuerKey, predicates) {
+async function buildCircuitInput(vc, issuerKey, predicates, holderSecret) {
     return {
         // private
         attrs: vc.proof.attributes,
         R8x: vc.proof.signature.R8x,
         R8y: vc.proof.signature.R8y,
         S: vc.proof.signature.S,
+        holderSecret,
         // public
         Ax: issuerKey.x,
         Ay: issuerKey.y,

@@ -1,9 +1,10 @@
 pragma circom 2.1.6;
 
 include "lib/credential.circom";
+include "lib/holder.circom";
 include "lib/predicate.circom";
 
-// A presentation: "I hold a credential signed by this issuer,
+// A presentation: "I hold a credential signed by this issuer, it was issued to me,
 // and its attributes satisfy these predicates".
 template Presentation(nAttrs, nPreds) {
     // ---- Private inputs (only the holder knows) ----
@@ -11,6 +12,7 @@ template Presentation(nAttrs, nPreds) {
     signal input R8x;             // issuer signature
     signal input R8y;
     signal input S;
+    signal input holderSecret;    // never leaves the wallet
 
     // ---- Public inputs (the verifier supplies these) ----
     signal input Ax;              // issuer public key
@@ -30,7 +32,12 @@ template Presentation(nAttrs, nPreds) {
     cred.Ax  <== Ax;
     cred.Ay  <== Ay;
 
-    // 2. Every predicate holds for that same credential
+    // 2. The credential was issued to this prover: slot 2 is the holder commitment
+    component holder = HolderBinding();
+    holder.holderSecret <== holderSecret;
+    holder.commitment   <== attrs[2];
+
+    // 3. Every predicate holds for that same credential
     component pred[nPreds];
     for (var p = 0; p < nPreds; p++) {
         pred[p] = Predicate(nAttrs);

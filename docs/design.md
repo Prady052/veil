@@ -1,6 +1,6 @@
 # Veil Design (v0)
 
-Status as of 11 Oct 2026, end of Week 3. This describes what I've built so far and what's still planned. The threat model is in [threat-model.md](threat-model.md) and the attribute encoding is in [encoding.md](encoding.md).
+Last updated 12 Oct 2026, during Week 4 (holder binding added). This describes what I've built so far and what's still planned. The threat model is in [threat-model.md](threat-model.md) and the attribute encoding is in [encoding.md](encoding.md).
 
 ## 1. What Veil does
 
@@ -97,13 +97,14 @@ The verifier never takes public inputs from the holder. This one rule stops thre
 
 | Inputs | Signals |
 | --- | --- |
-| Private (13) | `attrs[10]`, `R8x`, `R8y`, `S` |
+| Private (14) | `attrs[10]`, `R8x`, `R8y`, `S`, `holderSecret` |
 | Public (14) | `Ax`, `Ay`, `predAttr[4]`, `predOp[4]`, `predValue[4]` |
 
 Rules:
 
 1. **Credential** (`lib/credential.circom`): `M = Poseidon(attrs)`, and the signature on `M` is valid under `(Ax, Ay)`.
-2. **Predicates** (`lib/predicate.circom`), for each of the 4 slots:
+2. **Holder binding** (`lib/holder.circom`): `Poseidon(holderSecret)` equals `attrs[2]`, the holder commitment the issuer signed. A copied credential file is useless without the secret.
+3. **Predicates** (`lib/predicate.circom`), for each of the 4 slots:
    - the slot number is a real slot, 0 to 9;
    - the operator is one of: 0 none, 1 `==`, 2 `>=`, 3 `<=`;
    - the chosen comparison is true.
@@ -112,7 +113,7 @@ Disclosure of an attribute is the `==` predicate against a public value, so it n
 
 Comparators are only sound on 32-bit inputs. For `>=` and `<=` the circuit forces the attribute and the value to fit in 32 bits. For `==` that check is switched off, so hashed attributes (the name) can still be compared for equality.
 
-Measured at the end of Week 3:
+Measured at the end of Week 3, before holder binding was added:
 
 | Measure | Value |
 | --- | --- |
@@ -124,7 +125,7 @@ Measured at the end of Week 3:
 
 ## 7. Testing
 
-`npm test` runs 21 tests against the circuit. 14 of them are negative tests that must produce no witness: forged credentials (4), false predicates (4), malformed requests (4) and two boundary cases. I also broke the circuit on purpose three times to confirm the tests notice.
+`npm test` runs 24 tests against the circuit. 16 of them are negative tests that must produce no witness: forged credentials (4), stolen credentials (2), false predicates (4), malformed requests (4) and two boundary cases. I also broke the circuit on purpose three times to confirm the tests notice.
 
 These tests use the honest witness generator, so they can't detect a signal that is assigned but never constrained. I plan to run `circomspect` for that.
 
@@ -137,7 +138,7 @@ These tests use the honest witness generator, so they can't detect a signal that
 | Disclose a subset of attributes | Built, as `==` |
 | Set membership ("state is MH or KA") | **Not built yet** |
 | Proofs to different verifiers share no linking value | Built: two proofs of the same statement had 0 of 8 numbers in common. The full linkage experiment is planned for Week 7 |
-| Holder binding | **Planned, Week 4.** The commitment is in the credential, but the circuit doesn't check it yet |
+| Holder binding | Built: the circuit checks `Poseidon(holderSecret)` against the signed commitment |
 | Nonce and domain binding (replay protection) | **Planned, Week 4** |
 | Per-verifier pseudonym | **Planned, Week 4** |
 | Proving in the browser on a phone | **Planned, Week 4.** Proving currently runs in Node |

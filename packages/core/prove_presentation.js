@@ -7,6 +7,7 @@ const { resolveIssuerKey, buildCircuitInput } = require("./presentation");
 
 const WASM_FILE = "build/presentation_js/presentation.wasm";
 const ZKEY_FILE = "build/presentation_final.zkey";
+const SECRET_FILE = "build/holder_secret.txt"; // the wallet's secret, created by request_credential.js
 
 async function main() {
     const requestFile = process.argv[2];
@@ -20,6 +21,8 @@ async function main() {
     for (const file of [WASM_FILE, ZKEY_FILE]) {
         if (!fs.existsSync(file)) throw new Error(`${file} is missing: compile the circuit and run the setup first`);
     }
+    if (!fs.existsSync(SECRET_FILE)) throw new Error(`${SECRET_FILE} is missing: this device has no holder secret`);
+    const holderSecret = fs.readFileSync(SECRET_FILE, "utf8").trim();
 
     const request = JSON.parse(fs.readFileSync(requestFile, "utf8"));
     const vc = JSON.parse(fs.readFileSync(vcFile, "utf8"));
@@ -29,7 +32,7 @@ async function main() {
     }
 
     const issuerKey = await resolveIssuerKey(vc.issuer, vc.proof.verificationMethod);
-    const input = await buildCircuitInput(vc, issuerKey, request.predicates);
+    const input = await buildCircuitInput(vc, issuerKey, request.predicates, holderSecret);
 
     // Witness + proof in one call. If any rule is broken, no witness exists and this throws.
     const start = Date.now();
