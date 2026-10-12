@@ -1,14 +1,21 @@
 // Witness-level tests for circuits/presentation.circom: can an input satisfy the rules?
 // Most of these are NEGATIVE tests: inputs that must NOT produce a witness.
-// Replay protection is a property of verification, so it is tested in proof.test.js.
+// Replay protection is a property of verification, so it is tested in proof.test.ts.
 // Run: npm test
-const path = require("path");
-const assert = require("assert");
-const crypto = require("crypto");
-const { wasm: wasmTester } = require("circom_tester");
-const { buildEddsa, buildPoseidon } = require("circomlibjs");
-const { encodeAttributes, hashAttributes } = require("../../packages/core/encoding");
-const { encodePredicates } = require("../../packages/core/predicates");
+import assert from "node:assert";
+import crypto from "node:crypto";
+import path from "node:path";
+import { wasm as wasmTester } from "circom_tester";
+import { buildEddsa } from "circomlibjs";
+import {
+    encodeAttributes,
+    encodePredicates,
+    hashAttributes,
+    holderCommitment,
+    poseidon,
+    type Claims,
+    type Predicate,
+} from "../../packages/core/src";
 
 const ROOT = path.join(__dirname, "..", "..");
 
@@ -18,7 +25,7 @@ const OTHER_SECRET = "9876543210987654321";
 
 // A test credential. Individual tests override single fields.
 // holderCommitment is added in issue(): it is Poseidon(HOLDER_SECRET).
-const BASE_CLAIMS = {
+const BASE_CLAIMS: Omit<Claims, "holderCommitment"> = {
     credentialId: "123456789",
     name: "Asha Rao",
     dateOfBirth: "1995-03-14",
@@ -29,24 +36,32 @@ const BASE_CLAIMS = {
     expiresAt: "2031-10-11",
 };
 
-const AGE_18 = { attr: "dateOfBirth", op: "<=", value: "2008-10-11" };
+const AGE_18: Predicate = { attr: "dateOfBirth", op: "<=", value: "2008-10-11" };
+
+// A signed credential, as the circuit's private inputs
+interface TestCredential {
+    attrs: string[];
+    R8x: string;
+    R8y: string;
+    S: string;
+}
+
+// secret -> Poseidon(secret), and (secret, domainHash) -> Poseidon(secret, domainHash)
+const commitmentOf = (secret: string) => holderCommitment(secret).toString();
+const pseudonymOf = (secret: string, domainHash: string) =>
+    poseidon([BigInt(secret), BigInt(domainHash)]).toString();
 
 describe("Presentation circuit", function () {
     this.timeout(300000); // compiling the circuit takes a while
 
-    let circuit;
-    let eddsa;
-    let F;
-    let issuerKey;
-    let issuerPub;
-    let commitmentOf; // secret -> Poseidon(secret), as a decimal string
-    let pseudonymOf;  // (secret, domainHash) -> Poseidon(secret, domainHash)
+    // These libraries have no TypeScript types
+    let circuit: any;
+    let eddsa: any;
+    let F: any;
+    let issuerKey: Buffer;
+    let issuerPub: any;
 
     before(async function () {
-        const poseidon = await buildPoseidon();
-        commitmentOf = (secret) => poseidon.F.toObject(poseidon([BigInt(secret)])).toString();
-        pseudonymOf = (secret, domainHash) =>
-            poseidon.F.toObject(poseidon([BigInt(secret), BigInt(domainHash)])).toString();
         circuit = await wasmTester(path.join(ROOT, "circuits", "presentation.circom"), {
             include: [path.join(ROOT, "node_modules")],
             output: path.join(ROOT, "build", "test"),
@@ -59,14 +74,13 @@ describe("Presentation circuit", function () {
 
     // Issue a credential: encode, hash, sign. By default it is bound to HOLDER_SECRET.
     // `signingKey` lets a test play a fake issuer.
-    async function issue(overrides = {}, signingKey = issuerKey) {
-        const attrs = await encodeAttributes({
+    async function issue(overrides: Partial<Claims> = {}, signingKey: Buffer = issuerKey): Promise<TestCredential> {
+        const attrs = encodeAttributes({
             ...BASE_CLAIMS,
             holderCommitment: commitmentOf(HOLDER_SECRET),
             ...overrides,
         });
-        const M = await hashAttributes(attrs);
-        const sig = eddsa.signPoseidon(signingKey, F.e(M));
+        const sig = eddsa.signPoseidon(signingKey, F.e(hashAttributes(attrs)));
         return {
             attrs: attrs.map(String),
             R8x: F.toObject(sig.R8[0]).toString(),
@@ -79,33 +93,38 @@ describe("Presentation circuit", function () {
     // VERIFIER supplies (public): the trusted issuer key, the request's nonce and domain,
     // and the predicates. Any nonce and domain give a witness, so fixed values are fine here.
     // `overrides` replaces single inputs, e.g. { wantPseudonym: "1" }.
-    async function makeInput(credential, predicates = [], holderSecret = HOLDER_SECRET, overrides = {}) {
+    async function makeInput(
+        credential: TestCredential,
+        predicates: Predicate[] = [],
+        holderSecret: string = HOLDER_SECRET,
+        overrides: Record<string, string> = {},
+    ) {
         return {
             ...credential,
             holderSecret,
-            Ax: F.toObject(issuerPub[0]).toString(),
-            Ay: F.toObject(issuerPub[1]).toString(),
+            Ax: F.toObject(issuerPub[0]).toString() as string,
+            Ay: F.toObject(issuerPub[1]).toString() as string,
             nonce: "424242",
             domainHash: "777",
             wantPseudonym: "0",
-            ...(await encodePredicates(predicates)),
+            ...encodePredicates(predicates),
             ...overrides,
         };
     }
 
     // A witness exists and satisfies every constraint
-    async function expectPass(input) {
+    async function expectPass(input: object) {
         const witness = await circuit.calculateWitness(input, true);
         await circuit.checkConstraints(witness);
     }
 
     // No witness exists: some rule is broken
-    async function expectFail(input) {
+    async function expectFail(input: object) {
         await assert.rejects(() => circuit.calculateWitness(input, true));
     }
 
     // The circuit's public output. In a witness, wire 0 is the constant 1 and outputs come next.
-    async function pseudonymFor(input) {
+    async function pseudonymFor(input: object): Promise<string> {
         const witness = await circuit.calculateWitness(input, true);
         await circuit.checkConstraints(witness);
         return witness[1].toString();
@@ -297,13 +316,13 @@ describe("Presentation circuit", function () {
         });
 
         it("pads a short set by repeating its first value, never with 0", async function () {
-            const { predSet } = await encodePredicates([{ attr: "state", op: "in", value: ["KA"] }]);
+            const { predSet } = encodePredicates([{ attr: "state", op: "in", value: ["KA"] }]);
             assert.deepStrictEqual(predSet[0], ["2", "2", "2", "2"]);
         });
 
         it("refuses an empty set or more than four values", async function () {
-            await assert.rejects(() => encodePredicates([{ attr: "state", op: "in", value: [] }]));
-            await assert.rejects(() => encodePredicates([
+            assert.throws(() => encodePredicates([{ attr: "state", op: "in", value: [] }]));
+            assert.throws(() => encodePredicates([
                 { attr: "state", op: "in", value: ["MH", "KA", "DL", "TN", "GJ"] },
             ]));
         });

@@ -1,11 +1,20 @@
-const Fastify = require("fastify");
-const { buildEddsa } = require("circomlibjs");
-const crypto = require("crypto");
-const fs = require("fs");
-const path = require("path");
-const { didFromHost, buildDidDocument } = require("../../packages/core/did");
-const { encodeAttributes, hashAttributes } = require("../../packages/core/encoding");
-const { PROOF_TYPE, buildUnsignedVc, claimsFromVc } = require("../../packages/core/vc");
+import Fastify from "fastify";
+import { buildEddsa } from "circomlibjs";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import {
+    PROOF_TYPE,
+    buildDidDocument,
+    buildUnsignedVc,
+    claimsFromVc,
+    didFromHost,
+    encodeAttributes,
+    hashAttributes,
+    type PublicKey,
+    type Subject,
+    type VerifiableCredential,
+} from "../../packages/core/src";
 
 const PORT = 3000;
 // The public address of this issuer. Its DID is derived from it.
@@ -14,6 +23,9 @@ const DID = didFromHost(HOST);
 const DATA_DIR = path.join(__dirname, "data");
 const KEY_FILE = path.join(DATA_DIR, "issuer_private.key");
 const VALID_YEARS = 5;
+
+// The body of POST /issue
+type IssueBody = Subject & { holderCommitment: string };
 
 // What a credential request must look like. Fastify rejects anything else with a 400.
 const issueSchema = {
@@ -33,7 +45,7 @@ const issueSchema = {
 };
 
 // Load the issuer's private key, or create it on first start
-function loadOrCreateKey() {
+function loadOrCreateKey(): Buffer {
     if (fs.existsSync(KEY_FILE)) {
         return Buffer.from(fs.readFileSync(KEY_FILE, "utf8").trim(), "hex");
     }
@@ -50,7 +62,7 @@ async function main() {
 
     const privKey = loadOrCreateKey();
     const pubKey = eddsa.prv2pub(privKey);
-    const publicKey = {
+    const publicKey: PublicKey = {
         x: F.toObject(pubKey[0]).toString(),
         y: F.toObject(pubKey[1]).toString(),
     };
@@ -67,14 +79,14 @@ async function main() {
     app.get("/.well-known/did.json", async () => didDocument);
 
     // Issue a credential. The issuer signs mock data: there is no real identity check.
-    app.post("/issue", { schema: issueSchema }, async (request, reply) => {
+    app.post<{ Body: IssueBody }>("/issue", { schema: issueSchema }, async (request, reply) => {
         const { holderCommitment, ...subject } = request.body;
 
         const now = new Date();
         const until = new Date(now);
         until.setUTCFullYear(until.getUTCFullYear() + VALID_YEARS);
 
-        const vc = buildUnsignedVc({
+        const unsigned = buildUnsignedVc({
             did: DID,
             credentialId: BigInt("0x" + crypto.randomBytes(16).toString("hex")).toString(),
             holderCommitment,
@@ -85,27 +97,29 @@ async function main() {
 
         // Encode the claims into the 10 field elements. Bad input (unknown state,
         // impossible date, ...) throws here, before anything is signed.
-        let attrs;
+        let attrs: bigint[];
         try {
-            attrs = await encodeAttributes(claimsFromVc(vc));
+            attrs = encodeAttributes(claimsFromVc(unsigned));
         } catch (err) {
-            return reply.code(400).send({ error: err.message });
+            return reply.code(400).send({ error: err instanceof Error ? err.message : String(err) });
         }
 
         // M = Poseidon(attrs), then sign M with the issuer's key
-        const M = await hashAttributes(attrs);
-        const sig = eddsa.signPoseidon(privKey, F.e(M));
+        const sig = eddsa.signPoseidon(privKey, F.e(hashAttributes(attrs)));
 
-        vc.proof = {
-            type: PROOF_TYPE,
-            created: now.toISOString(),
-            verificationMethod: `${DID}#key-1`,
-            proofPurpose: "assertionMethod",
-            attributes: attrs.map(String),
-            signature: {
-                R8x: F.toObject(sig.R8[0]).toString(),
-                R8y: F.toObject(sig.R8[1]).toString(),
-                S: sig.S.toString(),
+        const vc: VerifiableCredential = {
+            ...unsigned,
+            proof: {
+                type: PROOF_TYPE,
+                created: now.toISOString(),
+                verificationMethod: `${DID}#key-1`,
+                proofPurpose: "assertionMethod",
+                attributes: attrs.map(String),
+                signature: {
+                    R8x: F.toObject(sig.R8[0]).toString(),
+                    R8y: F.toObject(sig.R8[1]).toString(),
+                    S: sig.S.toString(),
+                },
             },
         };
         return vc;

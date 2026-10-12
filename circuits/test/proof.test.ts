@@ -1,16 +1,26 @@
-// Proof-level tests: one real Groth16 proof, checked the way a verifier checks it.
+// Proof-level tests: real Groth16 proofs, checked the way a verifier checks them.
 // The verifier rebuilds the public inputs from ITS OWN request, so a proof made for
 // one request must fail for any other.
 //
 // These need the proving and verification keys: run `npm run setup` first.
-const path = require("path");
-const fs = require("fs");
-const assert = require("assert");
-const crypto = require("crypto");
-const snarkjs = require("snarkjs");
-const { buildEddsa, buildPoseidon } = require("circomlibjs");
-const { encodeAttributes, hashAttributes } = require("../../packages/core/encoding");
-const { newRequest, buildCircuitInput, buildPublicSignals } = require("../../packages/core/presentation");
+import assert from "node:assert";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { buildEddsa } from "circomlibjs";
+import * as snarkjs from "snarkjs";
+import {
+    buildCircuitInput,
+    buildPublicSignals,
+    encodeAttributes,
+    hashAttributes,
+    holderCommitment,
+    newRequest,
+    type Groth16Proof,
+    type Predicate,
+    type PresentationRequest,
+    type PublicKey,
+} from "../../packages/core/src";
 
 const ROOT = path.join(__dirname, "..", "..");
 const WASM_FILE = path.join(ROOT, "build", "presentation_js", "presentation.wasm");
@@ -18,19 +28,19 @@ const ZKEY_FILE = path.join(ROOT, "build", "presentation_final.zkey");
 const VKEY_FILE = path.join(ROOT, "build", "presentation_vkey.json");
 
 const HOLDER_SECRET = "1234567890123456789";
-const AGE_18 = { attr: "dateOfBirth", op: "<=", value: "2008-10-11" };
+const AGE_18: Predicate = { attr: "dateOfBirth", op: "<=", value: "2008-10-11" };
 
 describe("Presentation proofs", function () {
     this.timeout(120000);
 
-    let vkey;
-    let issuerKey;      // the trusted issuer's public key, { x, y }
-    let otherIssuerKey; // some other issuer
-    let request;        // a request with no pseudonym, and the proof made for it
-    let proof;
-    let nymRequest;     // a request that asks for a pseudonym, and the proof made for it
-    let nymProof;
-    let nym;            // the pseudonym that proof reveals
+    let vkey: object;
+    let issuerKey: PublicKey;      // the trusted issuer's public key
+    let otherIssuerKey: PublicKey; // some other issuer
+    let request: PresentationRequest;    // a request with no pseudonym, and the proof made for it
+    let proof: Groth16Proof;
+    let nymRequest: PresentationRequest; // a request that asks for a pseudonym, and the proof made for it
+    let nymProof: Groth16Proof;
+    let nym: string;                     // the pseudonym that proof reveals
 
     before(async function () {
         if (![WASM_FILE, ZKEY_FILE, VKEY_FILE].every((file) => fs.existsSync(file))) {
@@ -40,9 +50,8 @@ describe("Presentation proofs", function () {
         vkey = JSON.parse(fs.readFileSync(VKEY_FILE, "utf8"));
 
         const eddsa = await buildEddsa();
-        const poseidon = await buildPoseidon();
         const F = eddsa.babyJub.F;
-        const publicKeyOf = (privateKey) => {
+        const publicKeyOf = (privateKey: Buffer): PublicKey => {
             const point = eddsa.prv2pub(privateKey);
             return { x: F.toObject(point[0]).toString(), y: F.toObject(point[1]).toString() };
         };
@@ -52,9 +61,9 @@ describe("Presentation proofs", function () {
         otherIssuerKey = publicKeyOf(crypto.randomBytes(32));
 
         // Issue one credential, bound to HOLDER_SECRET
-        const attrs = await encodeAttributes({
+        const attrs = encodeAttributes({
             credentialId: "123456789",
-            holderCommitment: poseidon.F.toObject(poseidon([BigInt(HOLDER_SECRET)])).toString(),
+            holderCommitment: holderCommitment(HOLDER_SECRET).toString(),
             name: "Asha Rao",
             dateOfBirth: "1995-03-14",
             state: "MH",
@@ -63,24 +72,28 @@ describe("Presentation proofs", function () {
             issuedAt: "2026-10-11",
             expiresAt: "2031-10-11",
         });
-        const sig = eddsa.signPoseidon(issuerPrivateKey, F.e(await hashAttributes(attrs)));
+        const sig = eddsa.signPoseidon(issuerPrivateKey, F.e(hashAttributes(attrs)));
         const vc = {
             proof: {
+                type: "test",
+                created: "",
+                verificationMethod: "",
+                proofPurpose: "",
                 attributes: attrs.map(String),
                 signature: {
-                    R8x: F.toObject(sig.R8[0]).toString(),
-                    R8y: F.toObject(sig.R8[1]).toString(),
-                    S: sig.S.toString(),
+                    R8x: F.toObject(sig.R8[0]).toString() as string,
+                    R8y: F.toObject(sig.R8[1]).toString() as string,
+                    S: sig.S.toString() as string,
                 },
             },
         };
 
         // The holder's side: answer a request with a proof (and the circuit's output)
-        async function prove(forRequest) {
-            const input = await buildCircuitInput(vc, issuerKey, forRequest, HOLDER_SECRET);
+        async function prove(forRequest: PresentationRequest): Promise<{ proof: Groth16Proof; publicSignals: string[] }> {
+            const input = buildCircuitInput(vc, issuerKey, forRequest, HOLDER_SECRET);
             try {
                 return await snarkjs.groth16.fullProve(input, WASM_FILE, ZKEY_FILE);
-            } catch (err) {
+            } catch {
                 throw new Error("Could not prove with the keys in build/. If the circuit changed, run `npm run setup`.");
             }
         }
@@ -98,13 +111,13 @@ describe("Presentation proofs", function () {
     });
 
     // Check the plain proof against a request, as a verifier would
-    async function verifies(checkedRequest, key = issuerKey) {
-        return snarkjs.groth16.verify(vkey, await buildPublicSignals(key, checkedRequest), proof);
+    async function verifies(checkedRequest: PresentationRequest, key: PublicKey = issuerKey): Promise<boolean> {
+        return snarkjs.groth16.verify(vkey, buildPublicSignals(key, checkedRequest), proof);
     }
 
     // Check a proof against the pseudonym request, with the pseudonym the holder claims
-    async function verifiesWithPseudonym(claimedPseudonym, whichProof = nymProof) {
-        const signals = await buildPublicSignals(issuerKey, nymRequest, claimedPseudonym);
+    async function verifiesWithPseudonym(claimedPseudonym: string, whichProof: Groth16Proof = nymProof): Promise<boolean> {
+        const signals = buildPublicSignals(issuerKey, nymRequest, claimedPseudonym);
         return snarkjs.groth16.verify(vkey, signals, whichProof);
     }
 
@@ -123,7 +136,7 @@ describe("Presentation proofs", function () {
     });
 
     it("rejects a proof presented for different predicates", async function () {
-        const stricter = [AGE_18, { attr: "state", op: "==", value: "MH" }];
+        const stricter: Predicate[] = [AGE_18, { attr: "state", op: "==", value: "MH" }];
         assert.strictEqual(await verifies({ ...request, predicates: stricter }), false);
     });
 

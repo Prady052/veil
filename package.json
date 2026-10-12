@@ -4,8 +4,16 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "setup": "node circuits/setup.js",
-    "test": "mocha \"circuits/test/**/*.test.js\" --exit"
+    "issuer": "tsx apps/issuer/server.ts",
+    "credential:request": "tsx apps/issuer/request_credential.ts",
+    "credential:verify": "tsx scripts/verify_vc.ts",
+    "request": "tsx scripts/make_request.ts",
+    "input": "tsx scripts/build_input.ts",
+    "prove": "tsx scripts/prove.ts",
+    "verify": "tsx scripts/verify.ts",
+    "setup": "tsx circuits/setup.ts",
+    "test": "tsx node_modules/mocha/bin/mocha.js \"circuits/test/**/*.test.ts\" --exit",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
@@ -15,11 +23,16 @@
     "circomlib": "^2.0.5",
     "circomlibjs": "^0.1.7",
     "fastify": "^5.12.5",
+    "poseidon-lite": "^0.3.0",
     "snarkjs": "^0.7.6"
   },
   "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^26.6.5",
     "chai": "^6.3.0",
     "circom_tester": "^0.0.24",
-    "mocha": "^12.0.3"
+    "mocha": "^12.0.3",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
   }
 }

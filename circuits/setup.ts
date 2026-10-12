@@ -5,10 +5,10 @@
 //   presentation.r1cs, presentation_js/presentation.wasm   (compiled circuit)
 //   presentation_final.zkey                                (proving key)
 //   presentation_vkey.json                                 (verification key)
-const { execSync } = require("child_process");
-const crypto = require("crypto");
-const fs = require("fs");
-const snarkjs = require("snarkjs");
+import { execSync } from "node:child_process";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import * as snarkjs from "snarkjs";
 
 const CIRCUIT = "circuits/presentation.circom";
 const BUILD = "build";
@@ -44,6 +44,6 @@ async function main() {
 }
 
 main().catch((err) => {
-    console.error("Error:", err.message);
+    console.error("Error:", err instanceof Error ? err.message : err);
     process.exit(1);
 });

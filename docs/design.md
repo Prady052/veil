@@ -55,7 +55,7 @@ The credential is a W3C VC Data Model 2.0 JSON document. It carries the claims t
 
 **This is a custom proof type, not a standardised Data Integrity cryptosuite.** `VeilEdDSAPoseidon2026` and the JWK curve name `BabyJubJub` in the DID document are my own, not registered values. The standards-track alternative is the BBS cryptosuite, which I keep as a stretch comparison.
 
-The signature covers only the 10 numbers. So anyone checking a credential must re-encode the readable claims and confirm they give the same numbers. That's why the encoding is a single shared module (`packages/core/encoding.js`).
+The signature covers only the 10 numbers. So anyone checking a credential must re-encode the readable claims and confirm they give the same numbers. That's why the encoding is a single shared module (`packages/core/src/encoding.ts`).
 
 ## 5. Protocol
 
