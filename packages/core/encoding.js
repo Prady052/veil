@@ -42,16 +42,19 @@ function toField(value, label) {
     return n;
 }
 
-// Text -> one field element: pack 31 bytes per chunk, length first, then hash
-async function encodeName(name) {
+// Text -> one field element: pack 31 bytes per chunk, length first, then hash.
+// Used for the name attribute and for a verifier's domain name.
+async function encodeText(text) {
     const poseidon = await getPoseidon();
-    const bytes = Buffer.from(name, "utf8");
+    const bytes = Buffer.from(text, "utf8");
     const chunks = [BigInt(bytes.length)];
     for (let i = 0; i < bytes.length; i += 31) {
         chunks.push(BigInt("0x" + bytes.subarray(i, i + 31).toString("hex")));
     }
     return poseidon.F.toObject(poseidon(chunks));
 }
+
+const encodeName = encodeText;
 
 // The attribute vector's slot order: ATTRIBUTES[4] is "dateOfBirth", and so on
 const ATTRIBUTES = [
@@ -110,5 +113,5 @@ async function hashAttributes(attrs) {
 
 module.exports = {
     SCHEMA_VERSION, STATES, INCOME_BANDS, EMPLOYMENT, ATTRIBUTES,
-    dateToInt, encodeName, encodeValue, encodeAttributes, hashAttributes,
+    dateToInt, encodeText, encodeName, encodeValue, encodeAttributes, hashAttributes,
 };

@@ -1,5 +1,6 @@
-// Tests for circuits/presentation.circom.
+// Witness-level tests for circuits/presentation.circom: can an input satisfy the rules?
 // Most of these are NEGATIVE tests: inputs that must NOT produce a witness.
+// Replay protection is a property of verification, so it is tested in proof.test.js.
 // Run: npm test
 const path = require("path");
 const assert = require("assert");
@@ -72,13 +73,16 @@ describe("Presentation circuit", function () {
     }
 
     // Circuit input: the credential and the prover's secret (private), plus what the
-    // VERIFIER supplies (public): the trusted issuer key and the predicates.
+    // VERIFIER supplies (public): the trusted issuer key, the request's nonce and domain,
+    // and the predicates. Any nonce and domain give a witness, so fixed values are fine here.
     async function makeInput(credential, predicates = [], holderSecret = HOLDER_SECRET) {
         return {
             ...credential,
             holderSecret,
             Ax: F.toObject(issuerPub[0]).toString(),
             Ay: F.toObject(issuerPub[1]).toString(),
+            nonce: "424242",
+            domainHash: "777",
             ...(await encodePredicates(predicates)),
         };
     }

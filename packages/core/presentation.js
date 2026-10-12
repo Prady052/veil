@@ -1,5 +1,10 @@
 // Shared pieces of a presentation: used by the holder (to prove) and the verifier (to check).
+//
+// A request, as the verifier sends it:
+//   { issuer, domain, nonce, predicates }
+const crypto = require("crypto");
 const { didToUrl, publicKeyFromDidDocument } = require("./did");
+const { encodeText } = require("./encoding");
 const { encodePredicates } = require("./predicates");
 
 // Fetch an issuer's DID document and return one of its public keys.
@@ -12,8 +17,28 @@ async function resolveIssuerKey(did, keyId) {
     return publicKeyFromDidDocument(didDocument, keyId);
 }
 
+// VERIFIER: turn "what I want proven" into a request for one presentation.
+// The nonce is fresh random for every request, so a proof can only answer this one.
+function newRequest({ issuer, predicates }, domain) {
+    return {
+        issuer,
+        domain,
+        nonce: BigInt("0x" + crypto.randomBytes(31).toString("hex")).toString(),
+        predicates,
+    };
+}
+
+// The request's public inputs, shared by both sides so they always agree
+async function requestInputs(request) {
+    return {
+        nonce: request.nonce,
+        domainHash: (await encodeText(request.domain)).toString(),
+        ...(await encodePredicates(request.predicates)),
+    };
+}
+
 // HOLDER: everything the circuit needs, private and public
-async function buildCircuitInput(vc, issuerKey, predicates, holderSecret) {
+async function buildCircuitInput(vc, issuerKey, request, holderSecret) {
     return {
         // private
         attrs: vc.proof.attributes,
@@ -24,16 +49,16 @@ async function buildCircuitInput(vc, issuerKey, predicates, holderSecret) {
         // public
         Ax: issuerKey.x,
         Ay: issuerKey.y,
-        ...(await encodePredicates(predicates)),
+        ...(await requestInputs(request)),
     };
 }
 
 // VERIFIER: the public inputs, built from its own request and the issuer's key.
 // The order must match the order the public inputs are declared in
-// circuits/presentation.circom: Ax, Ay, predAttr[], predOp[], predValue[].
-async function buildPublicSignals(issuerKey, predicates) {
-    const { predAttr, predOp, predValue } = await encodePredicates(predicates);
-    return [issuerKey.x, issuerKey.y, ...predAttr, ...predOp, ...predValue];
+// circuits/presentation.circom: Ax, Ay, nonce, domainHash, predAttr[], predOp[], predValue[].
+async function buildPublicSignals(issuerKey, request) {
+    const { nonce, domainHash, predAttr, predOp, predValue } = await requestInputs(request);
+    return [issuerKey.x, issuerKey.y, nonce, domainHash, ...predAttr, ...predOp, ...predValue];
 }
 
-module.exports = { resolveIssuerKey, buildCircuitInput, buildPublicSignals };
+module.exports = { resolveIssuerKey, newRequest, buildCircuitInput, buildPublicSignals };

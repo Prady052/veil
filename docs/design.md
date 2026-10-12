@@ -1,6 +1,6 @@
 # Veil Design (v0)
 
-Last updated 12 Oct 2026, during Week 4 (holder binding added). This describes what I've built so far and what's still planned. The threat model is in [threat-model.md](threat-model.md) and the attribute encoding is in [encoding.md](encoding.md).
+Last updated 12 Oct 2026, during Week 4 (holder binding and replay protection added). This describes what I've built so far and what's still planned. The threat model is in [threat-model.md](threat-model.md) and the attribute encoding is in [encoding.md](encoding.md).
 
 ## 1. What Veil does
 
@@ -76,10 +76,12 @@ The issuer never sees the holder secret. It signs mock data: real identity proof
 
 ### 5.2 Presentation
 
-1. The verifier sends a request: the issuer DID it trusts, and up to 4 predicates.
+1. The verifier sends a request: the issuer DID it trusts, its own domain, a fresh random nonce, and up to 4 predicates.
 
    ```json
    { "issuer": "did:web:localhost%3A3000",
+     "domain": "agegate.example",
+     "nonce": "<fresh 248-bit random number>",
      "predicates": [ { "attr": "dateOfBirth", "op": "<=", "value": "2008-10-11" } ] }
    ```
 2. The holder makes a Groth16 proof and sends back only this:
@@ -88,8 +90,11 @@ The issuer never sees the holder secret. It signs mock data: real identity proof
    { "verificationMethod": "did:web:localhost%3A3000#key-1", "proof": { "pi_a": [], "pi_b": [], "pi_c": [] } }
    ```
 3. The verifier checks that the key belongs to the issuer it trusts, fetches that key from the issuer's DID document, and builds the public inputs **itself** from its own request. Then it verifies the proof.
+4. The verifier records the nonce as used and refuses to accept it again.
 
-The verifier never takes public inputs from the holder. This one rule stops three attacks: a self-made issuer key, a predicate quietly switched off, and a proof made for a different request.
+The verifier never takes public inputs from the holder. This one rule stops four attacks: a self-made issuer key, a predicate quietly switched off, a proof made for a different request, and a proof replayed from an earlier request or another site.
+
+The proof is bound to the request's domain, but that only helps if the holder made it for the site they are really talking to. A browser wallet must check that the request's domain matches that site, or a malicious site could relay another site's request. That check is planned for Week 5; the command-line scripts only print the domain.
 
 ## 6. The circuit
 
@@ -98,7 +103,7 @@ The verifier never takes public inputs from the holder. This one rule stops thre
 | Inputs | Signals |
 | --- | --- |
 | Private (14) | `attrs[10]`, `R8x`, `R8y`, `S`, `holderSecret` |
-| Public (14) | `Ax`, `Ay`, `predAttr[4]`, `predOp[4]`, `predValue[4]` |
+| Public (16) | `Ax`, `Ay`, `nonce`, `domainHash`, `predAttr[4]`, `predOp[4]`, `predValue[4]` |
 
 Rules:
 
@@ -108,12 +113,13 @@ Rules:
    - the slot number is a real slot, 0 to 9;
    - the operator is one of: 0 none, 1 `==`, 2 `>=`, 3 `<=`;
    - the chosen comparison is true.
+4. **Request binding**: `nonce` and `domainHash` (the hash of the verifier's domain name) are public inputs. No other rule needs them, so each is used in one constraint of its own, to make sure it is tied to the proof whatever the proving tool does with unused inputs.
 
 Disclosure of an attribute is the `==` predicate against a public value, so it needs no separate mechanism.
 
 Comparators are only sound on 32-bit inputs. For `>=` and `<=` the circuit forces the attribute and the value to fit in 32 bits. For `==` that check is switched off, so hashed attributes (the name) can still be compared for equality.
 
-Measured at the end of Week 3, before holder binding was added:
+Measured at the end of Week 3, before holder binding and request binding were added:
 
 | Measure | Value |
 | --- | --- |
@@ -125,9 +131,12 @@ Measured at the end of Week 3, before holder binding was added:
 
 ## 7. Testing
 
-`npm test` runs 24 tests against the circuit. 16 of them are negative tests that must produce no witness: forged credentials (4), stolen credentials (2), false predicates (4), malformed requests (4) and two boundary cases. I also broke the circuit on purpose three times to confirm the tests notice.
+`npm test` runs 29 tests.
 
-These tests use the honest witness generator, so they can't detect a signal that is assigned but never constrained. I plan to run `circomspect` for that.
+- **24 witness-level tests** ask whether an input can satisfy the circuit. 16 of them are negative tests that must produce no witness: forged credentials (4), stolen credentials (2), false predicates (4), malformed requests (4) and two boundary cases.
+- **5 proof-level tests** make one real Groth16 proof and check it as a verifier would. Four are negative: a replay under a new nonce, a proof forwarded to another domain, a proof presented for different predicates, and a proof checked against another issuer's key. They need the keys from `npm run setup` and are skipped without them. I also broke the circuit on purpose three times to confirm the tests notice.
+
+All of these use the honest witness generator, so they can't detect a signal that is assigned but never constrained. I plan to run `circomspect` for that.
 
 ## 8. What is built and what isn't
 
@@ -139,7 +148,7 @@ These tests use the honest witness generator, so they can't detect a signal that
 | Set membership ("state is MH or KA") | **Not built yet** |
 | Proofs to different verifiers share no linking value | Built: two proofs of the same statement had 0 of 8 numbers in common. The full linkage experiment is planned for Week 7 |
 | Holder binding | Built: the circuit checks `Poseidon(holderSecret)` against the signed commitment |
-| Nonce and domain binding (replay protection) | **Planned, Week 4** |
+| Nonce and domain binding (replay protection) | Built in the circuit and the verifier. The wallet-side domain check is planned for Week 5 |
 | Per-verifier pseudonym | **Planned, Week 4** |
 | Proving in the browser on a phone | **Planned, Week 4.** Proving currently runs in Node |
 | Revocation and expiry | **Planned, Week 6** |

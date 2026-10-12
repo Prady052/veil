@@ -27,12 +27,16 @@ async function main() {
     const request = JSON.parse(fs.readFileSync(requestFile, "utf8"));
     const vc = JSON.parse(fs.readFileSync(vcFile, "utf8"));
 
+    // The proof will be bound to this domain and nonce. A browser wallet must also check
+    // that request.domain is the site it is really talking to (Week 5).
+    console.log(`Request from ${request.domain}`);
+
     if (vc.issuer !== request.issuer) {
         throw new Error(`The verifier wants a credential from ${request.issuer}`);
     }
 
     const issuerKey = await resolveIssuerKey(vc.issuer, vc.proof.verificationMethod);
-    const input = await buildCircuitInput(vc, issuerKey, request.predicates, holderSecret);
+    const input = await buildCircuitInput(vc, issuerKey, request, holderSecret);
 
     // Witness + proof in one call. If any rule is broken, no witness exists and this throws.
     const start = Date.now();

@@ -17,6 +17,8 @@ template Presentation(nAttrs, nPreds) {
     // ---- Public inputs (the verifier supplies these) ----
     signal input Ax;              // issuer public key
     signal input Ay;
+    signal input nonce;           // fresh random number, chosen by the verifier for this request
+    signal input domainHash;      // hash of the verifier's domain name
     signal input predAttr[nPreds];    // which slot each predicate is about
     signal input predOp[nPreds];      // 0 none, 1 ==, 2 >=, 3 <=
     signal input predValue[nPreds];   // the value to compare against
@@ -48,6 +50,12 @@ template Presentation(nAttrs, nPreds) {
         pred[p].op        <== predOp[p];
         pred[p].value     <== predValue[p];
     }
+
+    // 4. Bind the proof to one request at one verifier (replay protection).
+    //    No rule above uses nonce or domainHash. A public input that appears in no
+    //    constraint may not be tied to the proof at all, so each is used in one here.
+    signal nonceSquared <== nonce * nonce;
+    signal domainHashSquared <== domainHash * domainHash;
 }
 
-component main {public [Ax, Ay, predAttr, predOp, predValue]} = Presentation(10, 4);
+component main {public [Ax, Ay, nonce, domainHash, predAttr, predOp, predValue]} = Presentation(10, 4);
