@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "mocha \"circuits/test/**/*.test.js\""
+    "setup": "node circuits/setup.js",
+    "test": "mocha \"circuits/test/**/*.test.js\" --exit"
   },
   "keywords": [],
   "author": "",
