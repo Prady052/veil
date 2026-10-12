@@ -34,11 +34,13 @@ template SelectAttribute(nAttrs) {
 //   1  ==     attr == value   (also how an attribute is disclosed)
 //   2  >=     attr >= value
 //   3  <=     attr <= value
-template Predicate(nAttrs) {
+//   4  in     attr is one of set[0 .. setSize-1]
+template Predicate(nAttrs, setSize) {
     signal input attrs[nAttrs];
     signal input attrIndex;
     signal input op;
-    signal input value;
+    signal input value;           // used by ==, >=, <=
+    signal input set[setSize];    // used by in
 
     component sel = SelectAttribute(nAttrs);
     for (var i = 0; i < nAttrs; i++) {
@@ -60,9 +62,12 @@ template Predicate(nAttrs) {
     component isLe = IsEqual();
     isLe.in[0] <== op;
     isLe.in[1] <== 3;
+    component isIn = IsEqual();
+    isIn.in[0] <== op;
+    isIn.in[1] <== 4;
 
-    // RULE: op is one of 0, 1, 2, 3
-    isNone.out + isEq.out + isGe.out + isLe.out === 1;
+    // RULE: op is one of 0, 1, 2, 3, 4
+    isNone.out + isEq.out + isGe.out + isLe.out + isIn.out === 1;
 
     // ---- attr == value ----
     component eq = IsEqual();
@@ -89,9 +94,21 @@ template Predicate(nAttrs) {
     le.in[0] <== a;
     le.in[1] <== b;
 
+    // ---- attr in set ----
+    // (attr - set[0]) * (attr - set[1]) * ... is 0 exactly when attr equals one of them.
+    // No size limit applies, so this also works for hashed attributes.
+    signal product[setSize];
+    product[0] <== attr - set[0];
+    for (var k = 1; k < setSize; k++) {
+        product[k] <== product[k - 1] * (attr - set[k]);
+    }
+    component inSet = IsZero();
+    inSet.in <== product[setSize - 1];
+
     // RULE: the comparison that was asked for must be true
     signal okEq <== isEq.out * eq.out;
     signal okGe <== isGe.out * ge.out;
     signal okLe <== isLe.out * le.out;
-    isNone.out + okEq + okGe + okLe === 1;
+    signal okIn <== isIn.out * inSet.out;
+    isNone.out + okEq + okGe + okLe + okIn === 1;
 }

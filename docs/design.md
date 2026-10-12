@@ -1,6 +1,6 @@
 # Veil Design (v0)
 
-Last updated 12 Oct 2026, during Week 4 (holder binding, replay protection and pseudonyms added). This describes what I've built so far and what's still planned. The threat model is in [threat-model.md](threat-model.md) and the attribute encoding is in [encoding.md](encoding.md).
+Last updated 12 Oct 2026, during Week 4 (holder binding, replay protection, pseudonyms and set membership added). This describes what I've built so far and what's still planned. The threat model is in [threat-model.md](threat-model.md) and the attribute encoding is in [encoding.md](encoding.md).
 
 ## 1. What Veil does
 
@@ -101,12 +101,12 @@ The proof is bound to the request's domain, but that only helps if the holder ma
 
 ## 6. The circuit
 
-`circuits/presentation.circom` is `Presentation(10, 4)`: 10 attributes, 4 predicate slots.
+`circuits/presentation.circom` is `Presentation(10, 4, 4)`: 10 attributes, 4 predicate slots, and up to 4 values in a set.
 
 | Inputs | Signals |
 | --- | --- |
 | Private (14) | `attrs[10]`, `R8x`, `R8y`, `S`, `holderSecret` |
-| Public inputs (17) | `Ax`, `Ay`, `nonce`, `domainHash`, `wantPseudonym`, `predAttr[4]`, `predOp[4]`, `predValue[4]` |
+| Public inputs (33) | `Ax`, `Ay`, `nonce`, `domainHash`, `wantPseudonym`, `predAttr[4]`, `predOp[4]`, `predValue[4]`, `predSet[4][4]` |
 | Public output (1) | `pseudonym` |
 
 Rules:
@@ -115,12 +115,14 @@ Rules:
 2. **Holder binding** (`lib/holder.circom`): `Poseidon(holderSecret)` equals `attrs[2]`, the holder commitment the issuer signed. A copied credential file is useless without the secret.
 3. **Predicates** (`lib/predicate.circom`), for each of the 4 slots:
    - the slot number is a real slot, 0 to 9;
-   - the operator is one of: 0 none, 1 `==`, 2 `>=`, 3 `<=`;
+   - the operator is one of: 0 none, 1 `==`, 2 `>=`, 3 `<=`, 4 `in`;
    - the chosen comparison is true.
 4. **Scoped pseudonym** (`lib/pseudonym.circom`): the output is `Poseidon(holderSecret, domainHash)` when `wantPseudonym` is 1, and 0 when it is 0. It uses the same secret that the holder binding checks, so it belongs to the credential's owner. One holder gets the same value at one verifier every time, and unrelated values at different verifiers.
 5. **Request binding**: `nonce` and `domainHash` (the hash of the verifier's domain name) are public inputs. `domainHash` is used by the pseudonym. No rule needs the nonce, so it is used in one constraint of its own, to make sure it is tied to the proof whatever the proving tool does with unused inputs.
 
 Disclosure of an attribute is the `==` predicate against a public value, so it needs no separate mechanism.
+
+Set membership (`in`) checks that the attribute equals one of up to 4 public values: the product of the differences must be 0. A shorter list is padded by repeating its first value. It is never padded with 0, because 0 means "attribute absent" and would let an absent attribute pass.
 
 Comparators are only sound on 32-bit inputs. For `>=` and `<=` the circuit forces the attribute and the value to fit in 32 bits. For `==` that check is switched off, so hashed attributes (the name) can still be compared for equality.
 
@@ -136,9 +138,9 @@ Measured at the end of Week 3, before holder binding and request binding were ad
 
 ## 7. Testing
 
-`npm test` runs 38 tests.
+`npm test` runs 46 tests.
 
-- **30 witness-level tests** ask whether an input can satisfy the circuit. 17 of them are negative tests that must produce no witness: forged credentials (4), stolen credentials (2), false predicates (4), malformed requests (4), two boundary cases and a malformed pseudonym flag. Five more check the pseudonym's value: stable for one holder at one verifier, different across verifiers and across holders.
+- **38 witness-level tests** ask whether an input can satisfy the circuit. 19 of them are negative tests that must produce no witness: forged credentials (4), stolen credentials (2), false predicates (4), malformed requests (4), set membership (2), two boundary cases and a malformed pseudonym flag. Five more check the pseudonym's value, and two check how a set is encoded.
 - **8 proof-level tests** make real Groth16 proofs and check them as a verifier would. Six are negative: a replay under a new nonce, a proof forwarded to another domain, a proof presented for different predicates, a proof checked against another issuer's key, a holder claiming a pseudonym that isn't theirs, and a proof without a pseudonym when one was asked for. They need the keys from `npm run setup` and are skipped without them.
 
 All of these use the honest witness generator, so they can't detect a signal that is assigned but never constrained. I plan to run `circomspect` for that.
@@ -150,7 +152,7 @@ All of these use the honest witness generator, so they can't detect a signal tha
 | Issue a VC signed by a key that resolves through `did:web` | Built |
 | Prove predicates: `==`, `>=`, `<=` | Built |
 | Disclose a subset of attributes | Built, as `==` |
-| Set membership ("state is MH or KA") | **Not built yet** |
+| Set membership ("state is MH or KA") | Built: the `in` operator, up to 4 values |
 | Proofs to different verifiers share no linking value | Built: two proofs of the same statement had 0 of 8 numbers in common. The full linkage experiment is planned for Week 7 |
 | Holder binding | Built: the circuit checks `Poseidon(holderSecret)` against the signed commitment |
 | Nonce and domain binding (replay protection) | Built in the circuit and the verifier. The wallet-side domain check is planned for Week 5 |

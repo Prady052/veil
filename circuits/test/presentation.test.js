@@ -258,6 +258,57 @@ describe("Presentation circuit", function () {
         });
     });
 
+    describe("set membership", function () {
+        it("accepts an attribute that is in the set", async function () {
+            await expectPass(await makeInput(await issue(), [
+                { attr: "state", op: "in", value: ["KA", "MH"] },
+            ]));
+        });
+
+        it("accepts a set with a single value", async function () {
+            await expectPass(await makeInput(await issue(), [
+                { attr: "state", op: "in", value: ["MH"] },
+            ]));
+        });
+
+        it("accepts a full set of four values", async function () {
+            await expectPass(await makeInput(await issue(), [
+                { attr: "state", op: "in", value: ["KA", "DL", "TN", "MH"] },
+            ]));
+        });
+
+        it("accepts a hashed attribute that is in the set", async function () {
+            await expectPass(await makeInput(await issue(), [
+                { attr: "name", op: "in", value: ["Someone Else", "Asha Rao"] },
+            ]));
+        });
+
+        it("rejects an attribute that is not in the set", async function () {
+            await expectFail(await makeInput(await issue(), [
+                { attr: "state", op: "in", value: ["KA", "DL"] },
+            ]));
+        });
+
+        it("rejects when the set matches but another predicate is false", async function () {
+            await expectFail(await makeInput(await issue(), [
+                { attr: "state", op: "in", value: ["KA", "MH"] },
+                { attr: "incomeBand", op: "<=", value: "<2.5L" }, // false
+            ]));
+        });
+
+        it("pads a short set by repeating its first value, never with 0", async function () {
+            const { predSet } = await encodePredicates([{ attr: "state", op: "in", value: ["KA"] }]);
+            assert.deepStrictEqual(predSet[0], ["2", "2", "2", "2"]);
+        });
+
+        it("refuses an empty set or more than four values", async function () {
+            await assert.rejects(() => encodePredicates([{ attr: "state", op: "in", value: [] }]));
+            await assert.rejects(() => encodePredicates([
+                { attr: "state", op: "in", value: ["MH", "KA", "DL", "TN", "GJ"] },
+            ]));
+        });
+    });
+
     describe("false predicates", function () {
         it("rejects a false <= (a minor claiming to be 18)", async function () {
             const credential = await issue({ dateOfBirth: "2012-06-01" });

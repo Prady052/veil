@@ -62,13 +62,14 @@ async function buildCircuitInput(vc, issuerKey, request, holderSecret) {
 //
 // Order: the circuit's output first, then its public inputs in the order they are declared in
 // circuits/presentation.circom:
-//   pseudonym, Ax, Ay, nonce, domainHash, wantPseudonym, predAttr[], predOp[], predValue[].
+//   pseudonym, Ax, Ay, nonce, domainHash, wantPseudonym,
+//   predAttr[], predOp[], predValue[], predSet[][] (row by row).
 async function buildPublicSignals(issuerKey, request, pseudonym) {
-    const { nonce, domainHash, wantPseudonym, predAttr, predOp, predValue } = await requestInputs(request);
+    const { nonce, domainHash, wantPseudonym, predAttr, predOp, predValue, predSet } = await requestInputs(request);
     return [
         request.pseudonym ? String(pseudonym) : "0",
         issuerKey.x, issuerKey.y, nonce, domainHash, wantPseudonym,
-        ...predAttr, ...predOp, ...predValue,
+        ...predAttr, ...predOp, ...predValue, ...predSet.flat(),
     ];
 }
 

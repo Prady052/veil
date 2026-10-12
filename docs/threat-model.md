@@ -1,6 +1,6 @@
 # Veil Threat Model (v0)
 
-Last updated 12 Oct 2026, during Week 4 (holder binding, replay protection and pseudonyms added). For each attack I say whether the defence is built or still planned. See [design.md](design.md) for the protocol.
+Last updated 12 Oct 2026, during Week 4 (holder binding, replay protection, pseudonyms and set membership added). For each attack I say whether the defence is built or still planned. See [design.md](design.md) for the protocol.
 
 ## 1. What I'm protecting
 
@@ -78,7 +78,7 @@ One thing the issuer does see: a verifier fetches `did.json` from the issuer's s
 4. **Small anonymity set.** A holder is hidden among the valid credentials of that issuer. An issuer with few holders gives weak anonymity.
 5. **Predicates can leak.** A request for `dateOfBirth == 1995-03-14`, or a very narrow range, identifies the person and links them across sites without breaking any cryptography. The defence is policy in the wallet and the verifier, planned for Week 5.
 6. **Side channels.** IP addresses, cookies, timing and proof-generation time are out of scope.
-7. **Test coverage.** The 38 tests use the honest witness generator. They can't catch a signal that is assigned and never constrained. I plan to run `circomspect` for that.
+7. **Test coverage.** The 46 tests use the honest witness generator. They can't catch a signal that is assigned and never constrained. I plan to run `circomspect` for that.
 8. **Losing the device.** The holder secret is lost with it, and the credential becomes unusable. The holder needs a new credential bound to a new secret.
 9. **Custom proof type.** Veil's proof type is not a standardised Data Integrity cryptosuite, so standard VC tools can't verify these credentials.
 10. **Pseudonyms link visits on purpose.** When a site asks for a pseudonym, all of a holder's visits to that site can be connected to each other. That is the feature. It must be the holder's choice: the wallet should show that a pseudonym is being asked for, which is planned for Week 5. Without a pseudonym, visits to the same site are unlinkable.

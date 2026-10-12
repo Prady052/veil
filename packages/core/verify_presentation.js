@@ -58,7 +58,8 @@ async function main() {
 
     console.log(`✔ Verified for ${request.domain}: the holder has a credential from ${request.issuer} where`);
     for (const p of request.predicates) {
-        console.log(`    ${p.attr} ${p.op} ${p.value}`);
+        const value = Array.isArray(p.value) ? `[${p.value.join(", ")}]` : p.value;
+        console.log(`    ${p.attr} ${p.op} ${value}`);
     }
 
     // A pseudonym lets THIS site recognise a returning user, and tells it nothing else

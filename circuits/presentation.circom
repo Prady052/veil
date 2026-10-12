@@ -7,7 +7,7 @@ include "lib/pseudonym.circom";
 
 // A presentation: "I hold a credential signed by this issuer, it was issued to me,
 // and its attributes satisfy these predicates".
-template Presentation(nAttrs, nPreds) {
+template Presentation(nAttrs, nPreds, setSize) {
     // ---- Private inputs (only the holder knows) ----
     signal input attrs[nAttrs];   // the 10-slot attribute vector, see docs/encoding.md
     signal input R8x;             // issuer signature
@@ -22,8 +22,9 @@ template Presentation(nAttrs, nPreds) {
     signal input domainHash;      // hash of the verifier's domain name
     signal input wantPseudonym;   // 1 if the verifier asked for a pseudonym, else 0
     signal input predAttr[nPreds];    // which slot each predicate is about
-    signal input predOp[nPreds];      // 0 none, 1 ==, 2 >=, 3 <=
-    signal input predValue[nPreds];   // the value to compare against
+    signal input predOp[nPreds];      // 0 none, 1 ==, 2 >=, 3 <=, 4 in
+    signal input predValue[nPreds];   // the value to compare against (==, >=, <=)
+    signal input predSet[nPreds][setSize];   // the allowed values (in)
 
     // ---- Public output ----
     signal output pseudonym;      // Poseidon(holderSecret, domainHash), or 0 if not asked for
@@ -47,13 +48,16 @@ template Presentation(nAttrs, nPreds) {
     // 3. Every predicate holds for that same credential
     component pred[nPreds];
     for (var p = 0; p < nPreds; p++) {
-        pred[p] = Predicate(nAttrs);
+        pred[p] = Predicate(nAttrs, setSize);
         for (var i = 0; i < nAttrs; i++) {
             pred[p].attrs[i] <== attrs[i];
         }
         pred[p].attrIndex <== predAttr[p];
         pred[p].op        <== predOp[p];
         pred[p].value     <== predValue[p];
+        for (var k = 0; k < setSize; k++) {
+            pred[p].set[k] <== predSet[p][k];
+        }
     }
 
     // 4. A pseudonym for this verifier only, from the same secret that owns the credential
@@ -70,4 +74,4 @@ template Presentation(nAttrs, nPreds) {
     signal nonceSquared <== nonce * nonce;
 }
 
-component main {public [Ax, Ay, nonce, domainHash, wantPseudonym, predAttr, predOp, predValue]} = Presentation(10, 4);
+component main {public [Ax, Ay, nonce, domainHash, wantPseudonym, predAttr, predOp, predValue, predSet]} = Presentation(10, 4, 4);
