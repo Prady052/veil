@@ -6,9 +6,9 @@ const KEY_FILE = "build/issuer_private.key";
 
 async function main() {
     const dob = process.argv[2];   // e.g. 19950314
-    const out = process.argv[3];   // e.g. circuits/test/age_check_ok.json
+    const out = process.argv[3];   // e.g. examples/week1-age-check/inputs/age_check_ok.json
     if (!dob || !out) {
-        console.log("usage: node packages/core/issue_age.js <dob YYYYMMDD> <output.json>");
+        console.log("usage: node examples/week1-age-check/issue_age.js <dob YYYYMMDD> <output.json>");
         process.exit(1);
     }
 
