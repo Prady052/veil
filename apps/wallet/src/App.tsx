@@ -1,87 +1,148 @@
-import { useState } from "react";
-import { encodeText, holderCommitment, poseidon, randomField } from "@veil/core";
+import { useEffect, useState } from "react";
+import {
+    holderCommitment,
+    poseidon,
+    verifyVc,
+    type Check,
+    type Subject,
+    type VerifiableCredential,
+    type VerifyResult,
+} from "@veil/core";
+import { Checks } from "./components/Checks";
+import { CredentialForm } from "./components/CredentialForm";
+import { CredentialView } from "./components/CredentialView";
+import { ISSUER_URL, requestCredential } from "./issuer";
+import { forgetWallet, loadCredential, loadOrCreateSecret, saveCredential } from "./storage";
 
-// circomlib's published test value for Poseidon(1, 2). The same number appeared in the
-// Week 1 playground (Node) and must appear here (browser), or the two would disagree.
+// circomlib's published test value for Poseidon(1, 2): the wallet's hash must match the circuit's
 const POSEIDON_1_2 = "7853200120776062878684798364095072458815029376092732009249414926327459813530";
 
-// Show the start and end of a long number
 function short(n: string): string {
     return n.length > 20 ? `${n.slice(0, 10)}…${n.slice(-6)}` : n;
 }
 
+// The wallet's own extra check: is this credential bound to OUR secret?
+// The issuer could, by mistake or on purpose, sign a different commitment. Such a credential
+// would pass every other check, yet this wallet could never use it.
+function boundToThisWallet(vc: VerifiableCredential, secret: string): Check {
+    const ok = vc.credentialSubject.holderCommitment === holderCommitment(secret).toString();
+    return { name: "Bound to this wallet", ok, detail: ok ? "" : "the commitment is not this wallet's" };
+}
+
+// The six credential checks, plus the binding check
+async function checkCredential(vc: VerifiableCredential, secret: string): Promise<VerifyResult> {
+    const result = await verifyVc(vc);
+    if (!result.ok) return result;
+    const binding = boundToThisWallet(vc, secret);
+    return { ok: binding.ok, checks: [...result.checks, binding] };
+}
+
 export function App() {
-    const poseidonResult = poseidon([1n, 2n]).toString();
-    const poseidonMatches = poseidonResult === POSEIDON_1_2;
-
-    // Not saved anywhere yet: storage comes in the next step
     const [secret, setSecret] = useState<string | null>(null);
-    const [domain, setDomain] = useState("agegate.example");
+    const [credential, setCredential] = useState<VerifiableCredential | null>(null);
+    const [result, setResult] = useState<VerifyResult | null>(null);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
-    let domainHash = "";
-    try {
-        domainHash = encodeText(domain).toString();
-    } catch (err) {
-        domainHash = err instanceof Error ? err.message : String(err);
+    // On start: load (or create) the secret, then load and re-check any saved credential
+    useEffect(() => {
+        (async () => {
+            const s = await loadOrCreateSecret();
+            setSecret(s);
+            const saved = await loadCredential();
+            if (saved) {
+                setCredential(saved);
+                setResult(await checkCredential(saved, s));
+            }
+        })().catch((err) => setError(String(err)));
+    }, []);
+
+    // Ask the issuer, check what comes back, and keep it only if every check passes
+    async function getCredential(subject: Subject) {
+        if (!secret) return;
+        setBusy(true);
+        setError(null);
+        setResult(null);
+        try {
+            const vc = await requestCredential(subject, holderCommitment(secret).toString());
+            const checked = await checkCredential(vc, secret);
+            setResult(checked);
+            if (checked.ok) {
+                await saveCredential(vc);
+                setCredential(vc);
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setBusy(false);
+        }
     }
+
+    async function recheck() {
+        if (!credential || !secret) return;
+        setResult(null);
+        setResult(await checkCredential(credential, secret));
+    }
+
+    async function forget() {
+        if (!confirm("Delete this wallet's secret and credential? The credential can never be used again.")) return;
+        await forgetWallet();
+        setCredential(null);
+        setResult(null);
+        setSecret(await loadOrCreateSecret()); // a brand-new wallet
+    }
+
+    const poseidonOk = poseidon([1n, 2n]).toString() === POSEIDON_1_2;
 
     return (
         <main>
             <header>
                 <h1>Veil Wallet</h1>
-                <p className="muted">
-                    Step 4.6: the wallet's skeleton. This page runs Veil's shared code in the browser.
-                </p>
+                <p className="muted">Your credential stays on this device. Websites get proofs about it, never the credential.</p>
             </header>
 
             <section>
-                <h2>1. Same hash as the issuer and the circuit</h2>
-                <p>
-                    Poseidon(1, 2) computed in this browser:
-                    <code className="number" title={poseidonResult}>{short(poseidonResult)}</code>
-                </p>
-                <p className={poseidonMatches ? "ok" : "bad"}>
-                    {poseidonMatches
-                        ? "✔ Matches circomlib's value, so the wallet and the circuit agree"
-                        : "✘ Does not match circomlib: credentials made here would not verify"}
-                </p>
-            </section>
-
-            <section>
-                <h2>2. Holder secret and commitment</h2>
-                <p className="muted">
-                    The secret stays on this device. Only the commitment, Poseidon(secret), goes to the issuer.
-                </p>
-                <button onClick={() => setSecret(randomField().toString())}>
-                    {secret ? "Make a new secret" : "Make a secret"}
-                </button>
-                {secret && (
+                <h2>This wallet</h2>
+                {secret ? (
                     <dl>
-                        <dt>Secret (never leaves the wallet)</dt>
-                        <dd><code className="number" title={secret}>{short(secret)}</code></dd>
-                        <dt>Commitment (sent to the issuer)</dt>
-                        <dd>
-                            <code className="number" title={holderCommitment(secret).toString()}>
-                                {short(holderCommitment(secret).toString())}
-                            </code>
-                        </dd>
+                        <dt>Holder commitment (the only thing the issuer sees)</dt>
+                        <dd><code className="number" title={holderCommitment(secret).toString()}>{short(holderCommitment(secret).toString())}</code></dd>
+                        <dt>Holder secret</dt>
+                        <dd className="muted">Saved on this device only. Never shown, never sent.</dd>
                     </dl>
+                ) : (
+                    <p className="muted">Opening the wallet…</p>
                 )}
-                <p className="muted">Not saved yet: reload the page and it is gone. Storage is the next step.</p>
             </section>
 
             <section>
-                <h2>3. A verifier's domain hash</h2>
-                <label htmlFor="domain">Domain</label>
-                <input id="domain" value={domain} onChange={(e) => setDomain(e.target.value)} spellCheck={false} />
-                <p>
-                    Domain hash:
-                    <code className="number" title={domainHash}>{short(domainHash)}</code>
-                </p>
-                <p className="muted">
-                    The same number a verifier puts in its public inputs. Change one letter and it changes completely.
-                </p>
+                <h2>Credential</h2>
+                {credential ? (
+                    <>
+                        <CredentialView vc={credential} />
+                        <div className="actions">
+                            <button onClick={recheck}>Check again</button>
+                            <button className="danger" onClick={forget}>Forget this wallet</button>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <p className="muted">No credential yet. Ask the issuer at <code>{ISSUER_URL}</code> for one.</p>
+                        <CredentialForm busy={busy || !secret} onSubmit={getCredential} />
+                    </>
+                )}
+                {error && <p className="bad">{error}</p>}
+                {result && (
+                    <>
+                        <h3>{result.ok ? "Checks passed" : "Checks failed: the credential was not saved"}</h3>
+                        <Checks checks={result.checks} />
+                    </>
+                )}
             </section>
+
+            <footer className="muted">
+                {poseidonOk ? "✔" : "✘"} Shared code check: Poseidon in this browser {poseidonOk ? "matches" : "does NOT match"} the circuit's
+            </footer>
         </main>
     );
 }

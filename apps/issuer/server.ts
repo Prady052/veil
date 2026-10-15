@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import cors from "@fastify/cors";
 import { buildEddsa } from "circomlibjs";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -68,6 +69,12 @@ async function main() {
     };
 
     const app = Fastify({ logger: true });
+
+    // Let web pages on other origins call the issuer: the wallet (localhost:5173) asks for
+    // credentials, and wallets and verifiers fetch did.json. The DID document is public by
+    // design. POST /issue is open too, because this issuer signs mock data with no identity
+    // check; a real issuer would authenticate the user before issuing.
+    await app.register(cors, { origin: "*" });
 
     // Health check: is the issuer running, and what is its public key?
     app.get("/", async () => {

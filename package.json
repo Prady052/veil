@@ -16,7 +16,7 @@
     "prove": "tsx scripts/prove.ts",
     "verify": "tsx scripts/verify.ts",
     "setup": "tsx circuits/setup.ts",
-    "test": "tsx node_modules/mocha/bin/mocha.js \"circuits/test/**/*.test.ts\" --exit",
+    "test": "tsx node_modules/mocha/bin/mocha.js \"circuits/test/**/*.test.ts\" \"packages/core/test/**/*.test.ts\" --exit",
     "typecheck": "tsc --noEmit && tsc --noEmit -p apps/wallet",
     "wallet": "npm run dev -w @veil/wallet"
   },
@@ -25,6 +25,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@fastify/cors": "^11.3.1",
     "circomlib": "^2.0.5",
     "circomlibjs": "^0.1.7",
     "fastify": "^5.12.5",

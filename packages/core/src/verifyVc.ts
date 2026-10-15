@@ -1,9 +1,9 @@
-// Check a Veil credential the way a wallet would right after receiving it:
+// Check a Veil credential the way a wallet does right after receiving it:
 // resolve the issuer's DID, fetch its public key, and verify the signature.
-// Node-only for now: it uses circomlibjs for the EdDSA check.
-import { buildEddsa } from "circomlibjs";
+// Runs in Node and in the browser.
 import { resolveIssuerKey, type PublicKey } from "./did";
 import { encodeAttributes, hashAttributes } from "./encoding";
+import { verifyIssuerSignature } from "./signature";
 import { PROOF_TYPE, claimsFromVc, type VerifiableCredential } from "./vc";
 
 export interface Check {
@@ -70,20 +70,9 @@ export async function verifyVc(vc: VerifiableCredential, now = new Date()): Prom
     pass("Claims match attributes");
 
     // 5. Is the issuer's signature valid for M = Poseidon(attributes)?
-    const eddsa = await buildEddsa();
-    const F = eddsa.babyJub.F;
-    let signatureOk = false;
-    try {
-        const sig = vc.proof.signature;
-        signatureOk = eddsa.verifyPoseidon(
-            F.e(hashAttributes(attrs)),
-            { R8: [F.e(sig.R8x), F.e(sig.R8y)], S: BigInt(sig.S) },
-            [F.e(publicKey.x), F.e(publicKey.y)],
-        );
-    } catch (err) {
-        return fail("Signature", message(err));
+    if (!verifyIssuerSignature(hashAttributes(attrs), vc.proof.signature, publicKey)) {
+        return fail("Signature", "not signed by the issuer's key");
     }
-    if (!signatureOk) return fail("Signature", "not signed by the issuer's key");
     pass("Signature");
 
     // 6. Is the credential inside its validity period?

@@ -1,6 +1,6 @@
 # Veil Design (v0)
 
-Last updated 16 Oct 2026, during Week 4 (holder binding, replay protection, pseudonyms, set membership and the start of the wallet). This describes what I've built so far and what's still planned. The threat model is in [threat-model.md](threat-model.md) and the attribute encoding is in [encoding.md](encoding.md).
+Last updated 16 Oct 2026, during Week 4 (holder binding, replay protection, pseudonyms, set membership and the the wallet's first steps). This describes what I've built so far and what's still planned. The threat model is in [threat-model.md](threat-model.md) and the attribute encoding is in [encoding.md](encoding.md).
 
 ## 1. What Veil does
 
@@ -64,13 +64,16 @@ The signature covers only the 10 numbers. So anyone checking a credential must r
 1. The wallet creates a random `holderSecret` once and keeps it.
 2. The wallet sends `holderCommitment = Poseidon(holderSecret)` and the claims to `POST /issue`.
 3. The issuer validates the request, encodes the claims, computes `M` and signs it. Bad input (an unknown state, a date that doesn't exist) is rejected before anything is signed.
-4. The wallet checks the credential it received:
+4. The wallet (in the browser) checks the credential it received, and keeps it only if every check passes:
    - the proof type is known;
    - the issuer's DID resolves, and the document is for that DID;
    - the signing key belongs to the issuer and is listed under `assertionMethod`;
    - the readable claims re-encode to the signed numbers;
    - the signature is valid;
-   - the credential is inside its validity period.
+   - the credential is inside its validity period;
+   - the holder commitment in the credential is this wallet's own. The issuer could sign a different commitment by mistake or on purpose; such a credential passes every other check, yet the wallet could never use it.
+
+The wallet keeps the holder secret and the credential in the browser's IndexedDB. The secret is created once, the first time the wallet opens. The issuer signs with `circomlibjs`; the wallet checks signatures with `@zk-kit/eddsa-poseidon`, which runs in a browser. Both test the same equation, and a test checks that they agree.
 
 The issuer never sees the holder secret. It signs mock data: real identity proofing is out of scope.
 
@@ -138,12 +141,13 @@ Measured at the end of Week 3, before holder binding and request binding were ad
 
 ## 7. Testing
 
-`npm test` runs 46 tests.
+`npm test` runs 52 tests.
 
 - **38 witness-level tests** ask whether an input can satisfy the circuit. 19 of them are negative tests that must produce no witness: forged credentials (4), stolen credentials (2), false predicates (4), malformed requests (4), set membership (2), two boundary cases and a malformed pseudonym flag. Five more check the pseudonym's value, and two check how a set is encoded.
 - **8 proof-level tests** make real Groth16 proofs and check them as a verifier would. Six are negative: a replay under a new nonce, a proof forwarded to another domain, a proof presented for different predicates, a proof checked against another issuer's key, a holder claiming a pseudonym that isn't theirs, and a proof without a pseudonym when one was asked for. They need the keys from `npm run setup` and are skipped without them.
+- **6 signature tests** check that the wallet's signature checker agrees with the issuer's signer: it accepts what the issuer signs and refuses a changed message, a tampered signature, another key and garbage.
 
-All of these use the honest witness generator, so they can't detect a signal that is assigned but never constrained. I plan to run `circomspect` for that.
+The circuit tests use the honest witness generator, so they can't detect a signal that is assigned but never constrained. I plan to run `circomspect` for that.
 
 ## 8. What is built and what isn't
 
@@ -157,7 +161,7 @@ All of these use the honest witness generator, so they can't detect a signal tha
 | Holder binding | Built: the circuit checks `Poseidon(holderSecret)` against the signed commitment |
 | Nonce and domain binding (replay protection) | Built in the circuit and the verifier. The wallet-side domain check is planned for Week 5 |
 | Per-verifier pseudonym | Built. Optional: the verifier asks for it in the request |
-| Proving in the browser on a phone | **In progress, Week 4.** The wallet app exists (React, in `apps/wallet/`) and runs the shared encoding code in the browser. Proving still runs in Node |
+| Proving in the browser on a phone | **In progress, Week 4.** The wallet app (React, in `apps/wallet/`) creates and stores the holder secret, gets a credential from the issuer and checks it, all in the browser. Proving still runs in Node |
 | Revocation and expiry | **Planned, Week 6** |
 | Groth16 against PLONK | **Planned, Week 7** |
 
