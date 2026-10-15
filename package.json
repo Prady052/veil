@@ -1,8 +1,12 @@
 {
-  "name": "vc",
+  "name": "veil",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "private": true,
+  "description": "Unlinkable attribute proofs for W3C Verifiable Credentials",
+  "workspaces": [
+    "packages/core",
+    "apps/wallet"
+  ],
   "scripts": {
     "issuer": "tsx apps/issuer/server.ts",
     "credential:request": "tsx apps/issuer/request_credential.ts",
@@ -13,7 +17,8 @@
     "verify": "tsx scripts/verify.ts",
     "setup": "tsx circuits/setup.ts",
     "test": "tsx node_modules/mocha/bin/mocha.js \"circuits/test/**/*.test.ts\" --exit",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p apps/wallet",
+    "wallet": "npm run dev -w @veil/wallet"
   },
   "keywords": [],
   "author": "",

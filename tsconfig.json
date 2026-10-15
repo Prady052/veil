@@ -11,5 +11,5 @@
     "resolveJsonModule": true,
     "types": ["node", "mocha"]
   },
-  "include": ["packages/core/src", "apps/**/*.ts", "scripts", "circuits/**/*.ts", "types"]
+  "include": ["packages/core/src", "apps/issuer", "scripts", "circuits/**/*.ts", "types"]
 }

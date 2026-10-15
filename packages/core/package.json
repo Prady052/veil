@@ -1,0 +1,12 @@
+{
+  "name": "@veil/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Veil's shared code: attribute encoding, did:web, credentials, predicates and presentation requests",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "circomlibjs": "^0.1.7",
+    "poseidon-lite": "^0.3.0"
+  }
+}

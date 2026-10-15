@@ -1,6 +1,6 @@
 # Veil Design (v0)
 
-Last updated 12 Oct 2026, during Week 4 (holder binding, replay protection, pseudonyms and set membership added). This describes what I've built so far and what's still planned. The threat model is in [threat-model.md](threat-model.md) and the attribute encoding is in [encoding.md](encoding.md).
+Last updated 16 Oct 2026, during Week 4 (holder binding, replay protection, pseudonyms, set membership and the start of the wallet). This describes what I've built so far and what's still planned. The threat model is in [threat-model.md](threat-model.md) and the attribute encoding is in [encoding.md](encoding.md).
 
 ## 1. What Veil does
 
@@ -157,7 +157,7 @@ All of these use the honest witness generator, so they can't detect a signal tha
 | Holder binding | Built: the circuit checks `Poseidon(holderSecret)` against the signed commitment |
 | Nonce and domain binding (replay protection) | Built in the circuit and the verifier. The wallet-side domain check is planned for Week 5 |
 | Per-verifier pseudonym | Built. Optional: the verifier asks for it in the request |
-| Proving in the browser on a phone | **Planned, Week 4.** Proving currently runs in Node |
+| Proving in the browser on a phone | **In progress, Week 4.** The wallet app exists (React, in `apps/wallet/`) and runs the shared encoding code in the browser. Proving still runs in Node |
 | Revocation and expiry | **Planned, Week 6** |
 | Groth16 against PLONK | **Planned, Week 7** |
 
