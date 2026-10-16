@@ -11,6 +11,7 @@ import {
 import { Checks } from "./components/Checks";
 import { CredentialForm } from "./components/CredentialForm";
 import { CredentialView } from "./components/CredentialView";
+import { TestProof } from "./components/TestProof";
 import { ISSUER_URL, requestCredential } from "./issuer";
 import { forgetWallet, loadCredential, loadOrCreateSecret, saveCredential } from "./storage";
 
@@ -139,6 +140,8 @@ export function App() {
                     </>
                 )}
             </section>
+
+            {credential && secret && result?.ok && <TestProof credential={credential} secret={secret} />}
 
             <footer className="muted">
                 {poseidonOk ? "✔" : "✘"} Shared code check: Poseidon in this browser {poseidonOk ? "matches" : "does NOT match"} the circuit's

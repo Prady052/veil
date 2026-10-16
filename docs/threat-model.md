@@ -1,6 +1,6 @@
 # Veil Threat Model (v0)
 
-Last updated 16 Oct 2026, during Week 4 (holder binding, replay protection, pseudonyms, set membership, and the wallet storing and checking its credential). For each attack I say whether the defence is built or still planned. See [design.md](design.md) for the protocol.
+Last updated 17 Oct 2026, during Week 4 (holder binding, replay protection, pseudonyms, set membership, and the wallet storing and checking its credential). For each attack I say whether the defence is built or still planned. See [design.md](design.md) for the protocol.
 
 ## 1. What I'm protecting
 
@@ -82,3 +82,4 @@ One thing the issuer does see: a verifier fetches `did.json` from the issuer's s
 8. **Losing the device.** The holder secret is lost with it, and the credential becomes unusable. The holder needs a new credential bound to a new secret.
 9. **Custom proof type.** Veil's proof type is not a standardised Data Integrity cryptosuite, so standard VC tools can't verify these credentials.
 10. **Pseudonyms link visits on purpose.** When a site asks for a pseudonym, all of a holder's visits to that site can be connected to each other. That is the feature. It must be the holder's choice: the wallet should show that a pseudonym is being asked for, which is planned for Week 5. Without a pseudonym, visits to the same site are unlinkable.
+11. **The holder secret is stored unencrypted.** The wallet keeps it in the browser's IndexedDB. Other websites can't read it, but anyone using the device (through the browser's developer tools), malware on the device, or a script injected into the wallet's own site can. Encrypting it with a passcode, or keeping it in the phone's hardware key store, is production key management and out of scope.

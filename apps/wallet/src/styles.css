@@ -207,3 +207,18 @@ footer {
     margin-top: 24px;
     text-align: center;
 }
+
+label.checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+}
+
+label.checkbox input {
+    width: auto;
+}
+
+.progress progress {
+    width: 100%;
+}
