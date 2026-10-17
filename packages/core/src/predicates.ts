@@ -81,3 +81,32 @@ export function encodePredicates(predicates: Predicate[]): EncodedPredicates {
 
     return { predAttr, predOp, predValue, predSet };
 }
+
+// Comparisons in the circuit only work below 2^32 (see circuits/lib/predicate.circom)
+const RANGE_LIMIT = 2n ** 32n;
+
+// Does a credential satisfy a predicate? The same rules as the circuit, computed in plain
+// code, so a wallet can tell its user in advance whether a request can be answered.
+// `attrs` are the credential's 10 signed field elements.
+export function satisfies(attrs: readonly (string | bigint)[], p: Predicate): boolean {
+    const slot = (ATTRIBUTES as readonly string[]).indexOf(p.attr);
+    if (slot === -1) throw new Error(`Unknown attribute: ${p.attr}`);
+    const attr = BigInt(attrs[slot]);
+
+    if (p.op === "in") {
+        if (!Array.isArray(p.value)) throw new Error(`"in" needs a list of values`);
+        return p.value.some((v) => attr === encodeValue(p.attr, v));
+    }
+    if (Array.isArray(p.value)) throw new Error(`"${p.op}" takes a single value`);
+    const value = encodeValue(p.attr, p.value);
+    switch (p.op) {
+        case "==":
+            return attr === value;
+        case ">=":
+            return attr < RANGE_LIMIT && value < RANGE_LIMIT && attr >= value;
+        case "<=":
+            return attr < RANGE_LIMIT && value < RANGE_LIMIT && attr <= value;
+        default:
+            throw new Error(`Unknown operator: ${p.op}`);
+    }
+}

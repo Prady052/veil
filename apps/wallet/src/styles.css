@@ -222,3 +222,47 @@ label.checkbox input {
 .progress progress {
     width: 100%;
 }
+
+textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font: 0.85rem/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace;
+    resize: vertical;
+}
+
+button.secondary {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+}
+
+.request {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+.warn {
+    color: #b35c00;
+}
+
+@media (prefers-color-scheme: dark) {
+    .warn {
+        color: #ffb35c;
+    }
+}
+
+pre.json {
+    max-height: 240px;
+    overflow: auto;
+    padding: 10px;
+    border-radius: 6px;
+    background: var(--bg);
+    font: 0.75rem/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}

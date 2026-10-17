@@ -1,6 +1,6 @@
 // Shared pieces of a presentation: used by the holder (to prove) and the verifier (to check).
 import type { PublicKey } from "./did";
-import { encodeText, randomField } from "./encoding";
+import { encodeText, randomField, toField } from "./encoding";
 import { encodePredicates, type EncodedPredicates, type Predicate } from "./predicates";
 import type { VerifiableCredential } from "./vc";
 
@@ -50,6 +50,46 @@ export interface CircuitInput extends EncodedPredicates {
     nonce: string;
     domainHash: string;
     wantPseudonym: string;
+}
+
+// HOLDER: check a request that arrived from outside (pasted, scanned, fetched) before using it.
+// TypeScript's types only exist while writing code; they can't check data that arrives while
+// the program runs, so every field is checked here. Throws an Error that explains the problem.
+export function parseRequest(data: unknown): PresentationRequest {
+    if (typeof data !== "object" || data === null || Array.isArray(data)) {
+        throw new Error("A request must be a JSON object");
+    }
+    const r = data as Record<string, unknown>;
+    const text = (field: string): string => {
+        const value = r[field];
+        if (typeof value !== "string" || value === "") {
+            throw new Error(`The request's "${field}" must be a non-empty string`);
+        }
+        return value;
+    };
+
+    const issuer = text("issuer");
+    if (!issuer.startsWith("did:web:")) throw new Error(`The request's issuer is not a did:web: ${issuer}`);
+    const domain = text("domain");
+    const nonce = text("nonce");
+    toField(nonce, "The request's nonce");
+
+    const pseudonym = r.pseudonym ?? false;
+    if (typeof pseudonym !== "boolean") throw new Error(`The request's "pseudonym" must be true or false`);
+
+    if (!Array.isArray(r.predicates)) throw new Error(`The request's "predicates" must be a list`);
+    for (const p of r.predicates) {
+        const value = (p as Record<string, unknown>)?.value;
+        const isText = typeof value === "string";
+        const isList = Array.isArray(value) && value.every((v) => typeof v === "string");
+        if (typeof p !== "object" || p === null || (!isText && !isList)) {
+            throw new Error("Each predicate needs an attr, an op and a value");
+        }
+    }
+    const predicates = r.predicates as Predicate[];
+    encodePredicates(predicates); // throws on unknown attributes, operators or values
+
+    return { issuer, domain, nonce, pseudonym, predicates };
 }
 
 // VERIFIER: turn "what I want proven" into a request for one presentation

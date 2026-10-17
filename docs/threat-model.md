@@ -1,6 +1,6 @@
 # Veil Threat Model (v0)
 
-Last updated 17 Oct 2026, during Week 4 (holder binding, replay protection, pseudonyms, set membership, and the wallet storing and checking its credential). For each attack I say whether the defence is built or still planned. See [design.md](design.md) for the protocol.
+Last updated 17 Oct 2026, during Week 4 (holder binding, replay protection, pseudonyms, set membership, and the browser wallet). For each attack I say whether the defence is built or still planned. See [design.md](design.md) for the protocol.
 
 ## 1. What I'm protecting
 
@@ -76,7 +76,7 @@ One thing the issuer does see: a verifier fetches `did.json` from the issuer's s
 2. **Key compromise.** It's handled only by rotating the key in the DID document. Credentials signed by the compromised key stay valid until the key is removed, and then every credential under that key fails at once.
 3. **Single-party trusted setup.** I ran the Groth16 setup alone. Whoever keeps the setup randomness could forge proofs. This is fine for a demo and not for production.
 4. **Small anonymity set.** A holder is hidden among the valid credentials of that issuer. An issuer with few holders gives weak anonymity.
-5. **Predicates can leak.** A request for `dateOfBirth == 1995-03-14`, or a very narrow range, identifies the person and links them across sites without breaking any cryptography. The defence is policy in the wallet and the verifier, planned for Week 5.
+5. **Predicates can leak.** A request for `dateOfBirth == 1995-03-14`, or a very narrow range, identifies the person and links them across sites without breaking any cryptography. The defence is policy. The wallet already shows the holder every predicate in plain words, and warns when one reveals a value outright (`==`, or `in` with one value). Refusing over-narrow ranges is planned for Week 5.
 6. **Side channels.** IP addresses, cookies, timing and proof-generation time are out of scope.
 7. **Test coverage.** The 46 circuit tests use the honest witness generator. They can't catch a signal that is assigned and never constrained. I plan to run `circomspect` for that.
 8. **Losing the device.** The holder secret is lost with it, and the credential becomes unusable. The holder needs a new credential bound to a new secret.

@@ -1,6 +1,6 @@
 # Veil Design (v0)
 
-Last updated 17 Oct 2026, during Week 4 (holder binding, replay protection, pseudonyms, set membership, and the wallet storing, checking and proving). This describes what I've built so far and what's still planned. The threat model is in [threat-model.md](threat-model.md) and the attribute encoding is in [encoding.md](encoding.md).
+Last updated 17 Oct 2026, during Week 4 (holder binding, replay protection, pseudonyms, set membership, and the browser wallet). This describes what I've built so far and what's still planned. The threat model is in [threat-model.md](threat-model.md) and the attribute encoding is in [encoding.md](encoding.md).
 
 ## 1. What Veil does
 
@@ -141,11 +141,12 @@ Measured at the end of Week 3, before holder binding and request binding were ad
 
 ## 7. Testing
 
-`npm test` runs 52 tests.
+`npm test` runs 60 tests.
 
 - **38 witness-level tests** ask whether an input can satisfy the circuit. 19 of them are negative tests that must produce no witness: forged credentials (4), stolen credentials (2), false predicates (4), malformed requests (4), set membership (2), two boundary cases and a malformed pseudonym flag. Five more check the pseudonym's value, and two check how a set is encoded.
 - **8 proof-level tests** make real Groth16 proofs and check them as a verifier would. Six are negative: a replay under a new nonce, a proof forwarded to another domain, a proof presented for different predicates, a proof checked against another issuer's key, a holder claiming a pseudonym that isn't theirs, and a proof without a pseudonym when one was asked for. They need the keys from `npm run setup` and are skipped without them.
 - **6 signature tests** check that the wallet's signature checker agrees with the issuer's signer: it accepts what the issuer signs and refuses a changed message, a tampered signature, another key and garbage.
+- **8 request tests** check the wallet's two checks before proving: `parseRequest` refuses malformed requests, and `satisfies` agrees with the circuit's rules, including the boundaries and the 32-bit limit.
 
 The circuit tests use the honest witness generator, so they can't detect a signal that is assigned but never constrained. I plan to run `circomspect` for that.
 
@@ -161,7 +162,7 @@ The circuit tests use the honest witness generator, so they can't detect a signa
 | Holder binding | Built: the circuit checks `Poseidon(holderSecret)` against the signed commitment |
 | Nonce and domain binding (replay protection) | Built in the circuit and the verifier. The wallet-side domain check is planned for Week 5 |
 | Per-verifier pseudonym | Built. Optional: the verifier asks for it in the request |
-| Proving in the browser on a phone | **In progress, Week 4.** The wallet app (React, in `apps/wallet/`) creates and stores the holder secret, gets a credential from the issuer and checks it, all in the browser. It also makes and checks a real proof in the browser, in a Web Worker so the page stays responsive. Answering a verifier's request and testing on a phone are next |
+| Proving in the browser on a phone | **Built in a desktop browser.** The wallet (React, in `apps/wallet/`) stores the holder secret, gets and checks a credential, reads a verifier's request, shows the holder what is asked and whether they qualify, and proves in a Web Worker. The command-line verifier accepts its presentations. **Not yet tested on a phone**: a phone can't reach `did:web:localhost`, and `did:web` needs https for any other host, so this waits for an https deployment |
 | Revocation and expiry | **Planned, Week 6** |
 | Groth16 against PLONK | **Planned, Week 7** |
 
