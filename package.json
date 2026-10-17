@@ -18,7 +18,9 @@
     "setup": "tsx circuits/setup.ts",
     "test": "tsx node_modules/mocha/bin/mocha.js \"circuits/test/**/*.test.ts\" \"packages/core/test/**/*.test.ts\" --exit",
     "typecheck": "tsc --noEmit && tsc --noEmit -p apps/wallet",
-    "wallet": "npm run dev -w @veil/wallet"
+    "wallet": "npm run dev -w @veil/wallet",
+    "wallet:build": "npm run build -w @veil/wallet",
+    "wallet:preview": "npm run preview -w @veil/wallet"
   },
   "keywords": [],
   "author": "",

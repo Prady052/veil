@@ -11,4 +11,9 @@ export default defineConfig({
         port: 5173,
         strictPort: true, // fail loudly if the port is taken, instead of silently moving
     },
+    // `npm run wallet:preview` serves the production build, where the service worker runs
+    preview: {
+        port: 4173,
+        strictPort: true,
+    },
 });

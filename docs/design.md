@@ -77,6 +77,12 @@ The wallet keeps the holder secret and the credential in the browser's IndexedDB
 
 The issuer never sees the holder secret. It signs mock data: real identity proofing is out of scope.
 
+The wallet is a Progressive Web App: it has a manifest, so it can be installed, and a service worker (`apps/wallet/public/sw.js`, production builds only) that keeps three things on the device:
+
+- the proving files (about 10 MB), downloaded once per circuit version. `npm run setup` writes a fingerprint of them (`version.json`) and the wallet puts it in their URLs, so a cached proving key can never be an old one for a new circuit;
+- the app itself, so the wallet opens without a network;
+- the issuer's DID document, fetched fresh when online, so the credential checks still run offline. A stale copy only affects the holder's own checks: a verifier always fetches the key itself.
+
 ### 5.2 Presentation
 
 1. The verifier sends a request: the issuer DID it trusts, its own domain, a fresh random nonce, and up to 4 predicates.
@@ -162,7 +168,7 @@ The circuit tests use the honest witness generator, so they can't detect a signa
 | Holder binding | Built: the circuit checks `Poseidon(holderSecret)` against the signed commitment |
 | Nonce and domain binding (replay protection) | Built in the circuit and the verifier. The wallet-side domain check is planned for Week 5 |
 | Per-verifier pseudonym | Built. Optional: the verifier asks for it in the request |
-| Proving in the browser on a phone | **Built in a desktop browser.** The wallet (React, in `apps/wallet/`) stores the holder secret, gets and checks a credential, reads a verifier's request, shows the holder what is asked and whether they qualify, and proves in a Web Worker. The command-line verifier accepts its presentations. **Not yet tested on a phone**: a phone can't reach `did:web:localhost`, and `did:web` needs https for any other host, so this waits for an https deployment |
+| Proving in the browser on a phone | **Built in a desktop browser.** The wallet (React, in `apps/wallet/`) stores the holder secret, gets and checks a credential, reads a verifier's request, shows the holder what is asked and whether they qualify, and proves in a Web Worker. It is an installable PWA that keeps the proving files on the device and opens offline. The command-line verifier accepts its presentations. **Not yet tested on a phone**: a phone can't reach `did:web:localhost`, and `did:web` needs https for any other host, so this waits for an https deployment |
 | Revocation and expiry | **Planned, Week 6** |
 | Groth16 against PLONK | **Planned, Week 7** |
 

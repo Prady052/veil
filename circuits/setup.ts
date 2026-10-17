@@ -5,7 +5,8 @@
 //   presentation.r1cs, presentation_js/presentation.wasm   (compiled circuit)
 //   presentation_final.zkey                                (proving key)
 //   presentation_vkey.json                                 (verification key)
-// and copies the three files the wallet needs into apps/wallet/public/circuit/.
+// and copies the three files the wallet needs into apps/wallet/public/circuit/, with version.json:
+// a fingerprint of the proving files, so the wallet never uses a cached copy of old ones.
 import { execSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -49,6 +50,11 @@ async function main() {
     for (const file of [WASM, ZKEY_FINAL, VKEY]) {
         fs.copyFileSync(file, `${WALLET_DIR}/${file.split("/").pop()}`);
     }
+    // The fingerprint: it changes whenever the proving files do
+    const hash = crypto.createHash("sha256");
+    for (const file of [WASM, ZKEY_FINAL]) hash.update(fs.readFileSync(file));
+    const version = hash.digest("hex").slice(0, 16);
+    fs.writeFileSync(`${WALLET_DIR}/version.json`, JSON.stringify({ version }) + "\n");
 
     console.log(`Done: ${ZKEY_FINAL}, ${VKEY}`);
     process.exit(0); // snarkjs keeps worker threads alive; exit explicitly
